@@ -74,9 +74,9 @@ assert rig.wheel_labels(parts2, settings) == {0:'Rear', 1:'Front'}
 settings.vehicle_type = 'AIRPLANE'
 settings.bounds_min, settings.bounds_max = (-4,-3,0), (4,3,2.5)
 plane_wheels = [
-    NS(**vars(mkpart((0,2,.35),(-.1,1.8,0),(.1,2.2,.7))), source=NS(name='NoseGear')),
-    NS(**vars(mkpart((-1,-1,.35),(-1.1,-1.2,0),(-.9,-.8,.7))), source=NS(name='MainGear_L')),
-    NS(**vars(mkpart((1,-1,.35),(.9,-1.2,0),(1.1,-.8,.7))), source=NS(name='MainGear_R')),
+    NS(**vars(mkpart((0,2,.35),(-.1,1.8,0),(.1,2.2,.7))), source=NS(name='NoseWheel')),
+    NS(**vars(mkpart((-1,-1,.35),(-1.1,-1.2,0),(-.9,-.8,.7))), source=NS(name='MainWheel_L')),
+    NS(**vars(mkpart((1,-1,.35),(.9,-1.2,0),(1.1,-.8,.7))), source=NS(name='MainWheel_R')),
 ]
 plane_labels = rig.wheel_labels(plane_wheels, settings)
 assert len(set(plane_labels.values())) == 3
@@ -92,7 +92,8 @@ settings.rig_mode, settings.bone_count = 'SIMPLE', 2
 assert rig.rig_bone_plan(plane_parts, settings)[2:] == (7, 7)
 settings.rig_mode, settings.bone_count = 'ADVANCED', 20
 assert rig.rig_bone_plan(plane_parts, settings)[2:] == (15, 20)
-for name, expected in [('NoseGear', 'WHEEL'), ('MainGear_L', 'WHEEL'),
+for name, expected in [('NoseWheel', 'WHEEL'), ('MainWheel_L', 'WHEEL'),
+                       ('NoseGear', 'GEAR'), ('MainStrut_R', 'GEAR'),
                        ('Propeller_1', 'PROPELLER'), ('Aileron_L', 'AILERON'),
                        ('Elevator', 'ELEVATOR'), ('Rudder', 'RUDDER'), ('Flap_L', 'FLAP')]:
     assert rig.name_hint(NS(name=name, get=lambda key, default=None: default),

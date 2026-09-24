@@ -35,6 +35,7 @@ PART_ITEMS = [
     ('HOOD', 'Hood', 'Front hood hinge'),
     ('TRUNK', 'Trunk', 'Rear trunk hinge'),
     ('PROPELLER', 'Propeller', 'Spin around the aircraft forward axis'),
+    ('GEAR', 'Landing gear strut', 'Retractable landing gear strut'),
     ('AILERON', 'Aileron', 'Wing roll control surface'),
     ('ELEVATOR', 'Elevator', 'Horizontal tail pitch surface'),
     ('RUDDER', 'Rudder', 'Vertical tail yaw surface'),
@@ -54,7 +55,7 @@ AIRCRAFT_RULES = [
     ('ELEVATOR', re.compile(r'elevator|stabilator|سکان افقی', re.I)),
     ('RUDDER', re.compile(r'rudder|سکان عمودی', re.I)),
     ('FLAP', re.compile(r'flap|فلپ', re.I)),
-    ('WHEEL', re.compile(r'nose[_ .-]?gear|main[_ .-]?gear|tail[_ .-]?wheel|landing[_ .-]?wheel', re.I)),
+    ('GEAR', re.compile(r'landing[_ .-]?gear|nose[_ .-]?gear|main[_ .-]?gear|tail[_ .-]?gear|strut', re.I)),
 ]
 NAME_RULES = [
     ('WHEEL', re.compile(r'wheel|tire|tyre|rim|roue|rad|چرخ|لاستیک', re.I)),
@@ -412,7 +413,8 @@ def rig_bone_plan(parts, settings):
     wheels = sorted(set(labels.values()))
     steering = steering_labels(parts, settings, labels)
     advanced = settings.rig_mode == 'ADVANCED'
-    moving = {'DOOR', 'HOOD', 'TRUNK'} | (AIRCRAFT_SURFACES if settings.vehicle_type == 'AIRPLANE' else set())
+    moving = {'DOOR', 'HOOD', 'TRUNK'} | ((AIRCRAFT_SURFACES | {'GEAR'})
+                                               if settings.vehicle_type == 'AIRPLANE' else set())
     hinges = sum(p.kind in moving for p in parts) if advanced else 0
     propellers = sum(p.kind == 'PROPELLER' for p in parts) if settings.vehicle_type == 'AIRPLANE' else 0
     required = 2 + len(wheels) + len(steering) + hinges + propellers
@@ -492,19 +494,40 @@ def create_rig(context):
         assignment = {}
         created_wheels = set()
         spring_controls = {}
+        gear_bones = {}
+        if settings.vehicle_type == 'AIRPLANE' and settings.rig_mode == 'ADVANCED':
+            for i, part in enumerate(parts):
+                if part.kind == 'GEAR':
+                    top = Vector(part.center)
+                    top.z = part.maximum[2]
+                    name = f'Gear.{i + 1:03d}'
+                    bone(eb, name, top, top - Vector((0, 0, reach)), 'Body')
+                    gear_bones[i] = name
         for i, part in enumerate(parts):
             if part.kind in {'BODY', 'IGNORE'} or (settings.rig_mode == 'SIMPLE' and
                                                   part.kind in {'DOOR', 'HOOD', 'TRUNK'} |
-                                                  AIRCRAFT_SURFACES) or (settings.vehicle_type != 'AIRPLANE' and
-                                                  part.kind in AIRCRAFT_SURFACES | {'PROPELLER'}):
+                                                  AIRCRAFT_SURFACES | {'GEAR'}) or (settings.vehicle_type != 'AIRPLANE' and
+                                                  part.kind in AIRCRAFT_SURFACES | {'PROPELLER', 'GEAR'}):
                 assignment[i] = None if part.kind == 'IGNORE' else 'Body'
                 continue
             p = Vector(part.center)
+            if part.kind == 'GEAR':
+                assignment[i] = gear_bones[i]
+                continue
             if part.kind == 'WHEEL':
                 label = names[i]
                 wheel_name = 'Wheel.' + label
                 is_front = label in steering
                 parent = 'Root'
+                if gear_bones:
+                    radius = (Vector(part.maximum) - Vector(part.minimum)).length * .5
+                    tolerance = max(.25, radius * .8)
+                    candidates = [((Vector(parts[gi].center) - p).xy.length, gear_name)
+                                  for gi, gear_name in gear_bones.items()
+                                  if all(parts[gi].minimum[axis] - tolerance <= p[axis] <=
+                                         parts[gi].maximum[axis] + tolerance for axis in (0, 1))]
+                    if candidates:
+                        parent = min(candidates)[1]
                 if wheel_name not in created_wheels:
                     segments = spring_segments[label]
                     for segment in range(segments):
@@ -796,6 +819,9 @@ def test_hinges(rig):
             axis, angle = Vector((0, 0, 1)), 28
         elif name.startswith('Flap.'):
             axis, angle = left, -35
+        elif name.startswith('Gear.'):
+            axis = left
+            angle = 60 if (pb.bone.head_local - body_center).dot(left) >= 0 else -60
         else:
             continue
         # Pose rotations use each bone's rest-local coordinates.
@@ -1172,7 +1198,7 @@ class VAR_PT_Panel(bpy.types.Panel):
             layout.operator('vehicle_auto_rig.build', icon='ARMATURE_DATA')
         box = layout.box()
         box.label(text='Object override (select parts):')
-        available = (('WHEEL', 'BODY', 'PROPELLER', 'AILERON', 'ELEVATOR', 'RUDDER',
+        available = (('WHEEL', 'BODY', 'PROPELLER', 'GEAR', 'AILERON', 'ELEVATOR', 'RUDDER',
                       'FLAP', 'DOOR', 'IGNORE') if s.vehicle_type == 'AIRPLANE' else
                      ('WHEEL', 'BODY', 'DOOR', 'HOOD', 'TRUNK', 'IGNORE'))
         for part in available:
