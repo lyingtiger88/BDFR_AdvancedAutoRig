@@ -100,6 +100,11 @@ assert not any(b.name.startswith(('Suspension.', 'Door.')) for b in rig.data.bon
 assert door.vertex_groups.get('Body')
 assert_move(body, lambda: setattr(rig.location, 'x', rig.location.x + 2), (2, 0, 0))
 assert_move(wheels[0], lambda: setattr(rig.location, 'y', rig.location.y - 1), (0, -1, 0))
+# Driver controls must actually affect the mesh (not merely exist in the UI).
+wheel_before = world_vertex(wheels[0])
+rig.data['wheel_roll_degrees'] = 40
+bpy.context.view_layer.update()
+assert (world_vertex(wheels[0]) - wheel_before).length > .05
 # A Root pose control must still move weighted mesh vertices in Pose Mode.
 before_pose = world_vertex(body)
 rig.pose.bones['Root'].location.x = .5
@@ -135,10 +140,10 @@ assert any(b.name.startswith('Door.') for b in rig.data.bones)
 front = next(w for w in wheels if w.location.y > 0)
 rear = next(w for w in wheels if w.location.y < 0)
 front_before, rear_before, body_before = map(world_vertex, (front, rear, body))
-rig['suspension_front'] = .25
+rig.data['suspension_front'] = .25
 bpy.context.view_layer.update()
 print('Suspension debug:', tuple(world_vertex(front) - front_before),
-      tuple(rig.pose.bones['Suspension.FL.01'].location), flush=True)
+      tuple(rig.evaluated_get(bpy.context.evaluated_depsgraph_get()).pose.bones['Suspension.FL.01'].location), flush=True)
 assert ((world_vertex(front) - front_before) - Vector((0, 0, .25))).length < 1e-4
 assert (world_vertex(rear) - rear_before).length < 1e-4
 assert (world_vertex(body) - body_before).length < 1e-4

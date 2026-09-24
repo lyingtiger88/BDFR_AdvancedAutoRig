@@ -404,17 +404,20 @@ def create_rig(context):
         bpy.ops.object.mode_set(mode='OBJECT')
         # Animatable controls. Bone local Y follows the axle for wheels and
         # world Z for steering pivots, so the same Euler channel is sufficient.
-        rig['steer_degrees'] = 0.0
-        rig['wheel_roll_degrees'] = 0.0
+        # Drive the pose from Armature data properties. Pointing pose drivers
+        # back at properties on the same Object makes a dependency cycle and
+        # leaves controls unevaluated in Blender's dependency graph.
+        arm_data['steer_degrees'] = 0.0
+        arm_data['wheel_roll_degrees'] = 0.0
         if spring_controls:
-            rig['suspension_front'] = 0.0
-            rig['suspension_rear'] = 0.0
+            arm_data['suspension_front'] = 0.0
+            arm_data['suspension_rear'] = 0.0
             for prop in ('suspension_front', 'suspension_rear'):
-                rig.id_properties_ui(prop).update(
+                arm_data.id_properties_ui(prop).update(
                     description='Wheel suspension travel in scene units; positive raises wheels')
-        rig.id_properties_ui('steer_degrees').update(min=-55.0, max=55.0,
-                                                     description='Front wheel steering in degrees')
-        rig.id_properties_ui('wheel_roll_degrees').update(
+        arm_data.id_properties_ui('steer_degrees').update(min=-55.0, max=55.0,
+                                                          description='Front wheel steering in degrees')
+        arm_data.id_properties_ui('wheel_roll_degrees').update(
             description='All wheel rotation in degrees')
         for name in created_wheels:
             pb = rig.pose.bones[name]
@@ -422,8 +425,8 @@ def create_rig(context):
             drv = pb.driver_add('rotation_euler', 1).driver
             drv.expression = 'var*0.017453292519943295'
             var = drv.variables.new()
-            var.name = 'var'; var.targets[0].id_type = 'OBJECT'
-            var.targets[0].id = rig
+            var.name = 'var'; var.targets[0].id_type = 'ARMATURE'
+            var.targets[0].id = arm_data
             var.targets[0].data_path = '["wheel_roll_degrees"]'
             steer_name = 'Steer.' + name.split('.', 1)[1]
             if steer_name in rig.pose.bones:
@@ -432,8 +435,8 @@ def create_rig(context):
                 drv = sb.driver_add('rotation_euler', 1).driver
                 drv.expression = 'var*0.017453292519943295'
                 var = drv.variables.new()
-                var.name = 'var'; var.targets[0].id_type = 'OBJECT'
-                var.targets[0].id = rig
+                var.name = 'var'; var.targets[0].id_type = 'ARMATURE'
+                var.targets[0].id = arm_data
                 var.targets[0].data_path = '["steer_degrees"]'
         for label, name in spring_controls.items():
             pb = rig.pose.bones[name]
@@ -441,8 +444,8 @@ def create_rig(context):
             drv = pb.driver_add('location', 1).driver
             drv.expression = 'var'
             var = drv.variables.new()
-            var.name = 'var'; var.targets[0].id_type = 'OBJECT'
-            var.targets[0].id = rig
+            var.name = 'var'; var.targets[0].id_type = 'ARMATURE'
+            var.targets[0].id = arm_data
             var.targets[0].data_path = f'["{prop}"]'
         # Rigid 1.0 weights keep separate parts solid and preserve object transforms.
         by_object = defaultdict(list)
@@ -669,11 +672,12 @@ class VAR_PT_Panel(bpy.types.Panel):
         if rig and rig.type == 'ARMATURE' and rig.get('vehicle_auto_rig_version'):
             box = layout.box()
             box.label(text='Animate rig controls:')
-            box.prop(rig, '["steer_degrees"]', text='Steering (degrees)')
-            box.prop(rig, '["wheel_roll_degrees"]', text='Wheel roll (degrees)')
-            if rig.get('rig_mode') == 'ADVANCED':
-                box.prop(rig, '["suspension_front"]', text='Front suspension')
-                box.prop(rig, '["suspension_rear"]', text='Rear suspension')
+            controls = rig.data if 'steer_degrees' in rig.data else rig
+            box.prop(controls, '["steer_degrees"]', text='Steering (degrees)')
+            box.prop(controls, '["wheel_roll_degrees"]', text='Wheel roll (degrees)')
+            if 'suspension_front' in controls:
+                box.prop(controls, '["suspension_front"]', text='Front suspension')
+                box.prop(controls, '["suspension_rear"]', text='Rear suspension')
             layout.operator('vehicle_auto_rig.repair_parenting', icon='CON_ARMATURE')
 
 
