@@ -105,14 +105,21 @@ assert not any(b.name.startswith(('Suspension.', 'Door.')) for b in rig.data.bon
 assert door.vertex_groups.get('Body')
 assert_move(body, lambda: setattr(rig.location, 'x', rig.location.x + 2), (2, 0, 0))
 assert_move(wheels[0], lambda: setattr(rig.location, 'y', rig.location.y - 1), (0, -1, 0))
-# Driver controls must actually affect the mesh (not merely exist in the UI).
+# Wheel rotation can be posed directly; there is no extra Roll slider.
+assert 'wheel_roll_degrees' not in rig.data
 wheel_before = world_vertex(wheels[0])
-rig.data['wheel_roll_degrees'] = 40
-# Programmatic ID-property changes need an explicit dependency graph tag;
-# editing the control in Blender's UI supplies that update automatically.
-rig.data.update_tag()
+label = next(vg.name for vg in wheels[0].vertex_groups if vg.name.startswith('Wheel.'))
+rig.pose.bones[label].rotation_euler[1] = .7
 bpy.context.view_layer.update()
 assert (world_vertex(wheels[0]) - wheel_before).length > .05
+# Explicitly selected meshes can be rebound to an older rig if their modifier
+# is missing, and the sidebar reports missing / disconnected meshes.
+addon_mesh = box('Accessory', (0, 0, 1.6), (.2, .2, .2))
+assert addon.binding_status(rig)[:2] == (6, 6)
+roots, count = addon.bind_selected_meshes(rig, [addon_mesh])
+assert count == 7 and addon_mesh.parent == rig
+assert addon_mesh.vertex_groups.get('Body')
+assert_move(addon_mesh, lambda: setattr(rig.location, 'z', rig.location.z + 1), (0, 0, 1))
 # A Root pose control must still move weighted mesh vertices in Pose Mode.
 before_pose = world_vertex(body)
 rig.pose.bones['Root'].location.x = .5
@@ -171,7 +178,7 @@ hood, trunk = bpy.data.objects['Hood'], bpy.data.objects['Trunk']
 count = addon.create_test_animation(rig, scene)
 print('Checking Test Rig Functionality animation', flush=True)
 assert count == 3 and scene.frame_start == 1 and scene.frame_end == 73
-assert rig.animation_data.action and rig.data.animation_data.action
+assert rig.animation_data.action
 closed = [world_vertex(ob) for ob in (door, hood, trunk, wheels[0], body)]
 scene.frame_set(19)
 opened = [world_vertex(ob) for ob in (door, hood, trunk, wheels[0], body)]
@@ -179,7 +186,7 @@ assert all((opened[i] - closed[i]).length > .03 for i in range(4)), (
     [(opened[i] - closed[i]).length for i in range(4)])
 assert (opened[4] - closed[4]).length < 1e-4
 addon.clear_test_animation(rig, scene)
-assert not rig.animation_data.action and not rig.data.animation_data.action
+assert not rig.animation_data.action
 assert (scene.frame_start, scene.frame_end, scene.frame_current) == (12, 180, 48)
 assert '_bdfr_test_rig_state' not in rig
 assert all((world_vertex(ob) - closed[i]).length < 1e-4

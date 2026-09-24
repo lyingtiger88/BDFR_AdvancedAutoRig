@@ -52,6 +52,10 @@ parts = [
 ]
 labels = rig.wheel_labels(parts, settings)
 assert labels == {0:'FL', 1:'FR', 2:'RL', 3:'RR', 4:'FL'}, labels
+for i in (0, 1, 4): parts[i].wheel_axle = 'REAR'
+for i in (2, 3): parts[i].wheel_axle = 'FRONT'
+assert rig.wheel_labels(parts, settings) == {0:'RL', 1:'RR', 2:'FL', 3:'FR', 4:'RL'}
+for p in parts: p.wheel_axle = 'AUTO'
 settings.rig_mode, settings.bone_count = 'ADVANCED', 17
 _, segments, required, actual = rig.rig_bone_plan(parts, settings)
 assert required == 12 and actual == 17 and sum(segments.values()) == 9
@@ -65,9 +69,11 @@ settings.bounds_min = (-.5,-1,0); settings.bounds_max = (.5,1,1.5)
 parts2 = [mkpart((0,.75,.35),(-.08,.40,0),(.08,1.1,.7)),
           mkpart((0,-.75,.35),(-.08,-1.1,0),(.08,-.4,.7))]
 assert rig.wheel_labels(parts2, settings) == {0:'Front', 1:'Rear'}
+parts2[0].wheel_axle, parts2[1].wheel_axle = 'REAR', 'FRONT'
+assert rig.wheel_labels(parts2, settings) == {0:'Rear', 1:'Front'}
 mesh = NS(vertices=[NS(co=V((i,0,0))) for i in range(6)],
           edges=[NS(vertices=(0,1)),NS(vertices=(1,2)),
                  NS(vertices=(3,4)),NS(vertices=(4,5))])
 obj = NS(data=mesh)
 assert rig.components(obj, True, 1000) == [[0,1,2],[3,4,5]]
-print('PASS: classification, wheels, islands and simple/advanced bone budgets')
+print('PASS: classification, front/rear overrides, islands and bone budgets')
