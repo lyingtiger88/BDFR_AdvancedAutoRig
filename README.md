@@ -6,7 +6,7 @@
 
 > **Status:** v0.1.0 prototype. Detection uses object names, disconnected mesh islands, dimensions and position. It is heuristic geometry analysis, not machine-learning segmentation. Blender runtime validation on representative production files is still pending.
 
-[راهنمای فارسی](docs/README.fa.md) · [Installable add-on ZIP](dist/BDFR_AdvancedAutoRig-0.1.0.zip)
+[راهنمای فارسی](docs/README.fa.md) · [Installable add-on ZIP](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/releases/download/v0.1.0/BDFR_AdvancedAutoRig-0.1.0.zip)
 
 ## What it does
 
@@ -18,7 +18,7 @@
 
 ## Install
 
-Download [the add-on ZIP](dist/BDFR_AdvancedAutoRig-0.1.0.zip). In Blender, open **Edit → Preferences → Add-ons → Install from Disk**, select the ZIP, and enable **BDFR Advanced AutoRig**. Open the 3D View sidebar with `N` and find the **Vehicle Rig** tab. Install the add-on ZIP, not GitHub's *Download ZIP* archive of the whole repository.
+Download [the add-on ZIP](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/releases/download/v0.1.0/BDFR_AdvancedAutoRig-0.1.0.zip). In Blender, open **Edit → Preferences → Add-ons → Install from Disk**, select the ZIP, and enable **BDFR Advanced AutoRig**. Open the 3D View sidebar with `N` and find the **Vehicle Rig** tab. Install the add-on ZIP, not GitHub's *Download ZIP* archive of the whole repository.
 
 ## Quick start
 
