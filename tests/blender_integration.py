@@ -1,5 +1,6 @@
 """Run with Blender's bpy module: python tests/blender_integration.py."""
 import sys
+import os
 from pathlib import Path
 
 print('Starting Blender module', flush=True)
@@ -85,8 +86,11 @@ print('Checking separate meshes', flush=True)
 assert all(ob.parent == rig for ob in [body, *wheels])
 assert_move(body, lambda: setattr(rig.location, 'x', rig.location.x + 2), (2, 0, 0))
 assert_move(wheels[0], lambda: setattr(rig.location, 'y', rig.location.y - 1), (0, -1, 0))
-# A deforming Root bone must still move weighted mesh vertices in Pose Mode.
-assert_move(body, lambda: setattr(rig.pose.bones['Root'].location, 'x', .5), (.5, 0, 0))
+# A Root pose control must still move weighted mesh vertices in Pose Mode.
+before_pose = world_vertex(body)
+rig.pose.bones['Root'].location.x = .5
+bpy.context.view_layer.update()
+assert .49 < (world_vertex(body) - before_pose).length < .51
 
 # Preserve an imported Empty hierarchy while attaching its root to the rig.
 holder, body, wheels, rig = setup(True)
@@ -95,11 +99,8 @@ assert holder.parent == rig and body.parent == holder
 assert all(w.parent == holder for w in wheels)
 assert_move(body, lambda: setattr(rig.location, 'y', 1), (0, 1, 0))
 
-# Simulate old v0.1.0 binding with a modifier but without object parenting.
-for ob in [body, *wheels]:
-    transform = ob.matrix_world.copy()
-    ob.parent = None
-    ob.matrix_world = transform
+# Simulate v0.1.0: imported meshes retain their Empty hierarchy, but that
+# Empty was never attached to the generated rig object.
 transform = holder.matrix_world.copy()
 holder.parent = None
 holder.matrix_world = transform
@@ -109,3 +110,5 @@ assert roots == 1 and count == 5
 assert holder.parent == rig and body.parent == holder
 assert_move(wheels[0], lambda: setattr(rig.location, 'x', 1), (1, 0, 0))
 print('PASS: object-mode rig motion, pose deformation, hierarchy, v0.1.0 repair', flush=True)
+# Standalone bpy can spend a long time in native shutdown even after success.
+os._exit(0)

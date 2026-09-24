@@ -4,9 +4,9 @@
 
 **Automatic first-pass vehicle rigging for Blender 4.2+.** Select a vehicle, inspect detected parts, and build an armature with rigid weights and simple animation controls.
 
-> **Status:** v0.1.0 prototype. Detection uses object names, disconnected mesh islands, dimensions and position. It is heuristic geometry analysis, not machine-learning segmentation. Blender runtime validation on representative production files is still pending.
+> **Status:** v0.1.1 preview. Detection uses object names, disconnected mesh islands, dimensions and position. It is heuristic geometry analysis, not machine-learning segmentation. Blender runtime validation on representative production files is still pending.
 
-[راهنمای فارسی](docs/README.fa.md) · [Installable add-on ZIP](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/releases/download/v0.1.0/BDFR_AdvancedAutoRig-0.1.0.zip)
+[راهنمای فارسی](docs/README.fa.md) · [Installable add-on ZIP](dist/BDFR_AdvancedAutoRig-0.1.0.zip)
 
 ## What it does
 
@@ -14,11 +14,11 @@
 - Finds wheels from component names or shape and location, scans disconnected mesh islands, and merges concentric tire/rim/hub components into one wheel control.
 - Lets you review each detected component and correct its type. Separate mesh objects can also be explicitly marked as body, wheel, door, hood, trunk or ignored.
 - Creates `Root`, `Body`, wheel, front steering and optional door/hood/trunk bones. Each detected moving component receives a rigid vertex group and an Armature modifier; source mesh geometry is not split.
-- Exposes animatable **Steering (degrees)** and **Wheel roll (degrees)** properties on the generated rig.
+- Parents the selected vehicle hierarchy to the armature object while preserving world transforms, so moving `Vehicle_Rig` in Object Mode carries the meshes. Also exposes animatable **Steering (degrees)** and **Wheel roll (degrees)** properties.
 
 ## Install
 
-Download [the add-on ZIP](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/releases/download/v0.1.0/BDFR_AdvancedAutoRig-0.1.0.zip). In Blender, open **Edit → Preferences → Add-ons → Install from Disk**, select the ZIP, and enable **BDFR Advanced AutoRig**. Open the 3D View sidebar with `N` and find the **Vehicle Rig** tab. Install the add-on ZIP, not GitHub's *Download ZIP* archive of the whole repository.
+Download [the add-on ZIP](dist/BDFR_AdvancedAutoRig-0.1.0.zip). In Blender, open **Edit → Preferences → Add-ons → Install from Disk**, select the ZIP, and enable **BDFR Advanced AutoRig**. Open the 3D View sidebar with `N` and find the **Vehicle Rig** tab. Install the add-on ZIP, not GitHub's *Download ZIP* archive of the whole repository.
 
 ## Quick start
 
@@ -26,7 +26,11 @@ Download [the add-on ZIP](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/r
 2. Choose the vehicle type and front direction. Click **1. Analyze Vehicle**.
 3. Review the detected parts. Change the type beside any component that was misidentified. To override a separate object's classification, select it, use **Mark Selected Objects**, then analyze again.
 4. Re-select the original vehicle meshes if necessary, then click **2. Build Rig**.
-5. Select `Vehicle_Rig`. In Pose Mode, use `Root` for whole-vehicle motion and `Body` for body movement. Use the sidebar properties **Steering (degrees)** and **Wheel roll (degrees)** for animation; right-click a value and choose **Insert Keyframe**.
+5. Select `Vehicle_Rig`. Moving it in Object Mode moves the whole vehicle. In Pose Mode, use `Root` for whole-vehicle motion and `Body` for body movement. Use the sidebar properties **Steering (degrees)** and **Wheel roll (degrees)** for animation; right-click a value and choose **Insert Keyframe**.
+
+## Fix a rig built with v0.1.0
+
+Install v0.1.1, select the existing `Vehicle_Rig` object, and click **Repair Existing Rig Binding** in the Vehicle Rig sidebar. The repair attaches meshes already using this rig as their Armature modifier target, without rebuilding weights. Reset any rig movement that previously left the meshes behind **before** running repair; the repair preserves their current world positions. The existing vehicle hierarchy is preserved when its mesh descendants all use this rig.
 
 ## Model preparation and limitations
 
@@ -34,7 +38,7 @@ Download [the add-on ZIP](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/r
 - Named doors, hood and trunk can get bones, but their hinge locations are estimates. Correct them in Armature Edit Mode if needed.
 - Very large meshes above the configured per-mesh scan limit are treated as one component and flagged. A source mesh with an existing Armature modifier or linked library data is rejected.
 - This release does **not** implement suspension, Ackermann steering, wheel-ground contact, vehicle physics, path driving, export baking or production-ready auto-animation. The front steering controls use one shared angle and wheel roll uses one shared rotation value.
-- Blender itself was unavailable in the development environment. Python syntax and detection smoke tests pass; installation, modifiers and drivers should be verified against an actual sample vehicle in Blender before use in production.
+- A Blender 4.5 integration test now checks object-mode rig translation, pose deformation, imported hierarchy preservation, and repair of an older rig. Test with a copy of a production vehicle before relying on it.
 
 ## Development
 
