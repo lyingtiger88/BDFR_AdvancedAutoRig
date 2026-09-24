@@ -3,7 +3,7 @@
 bl_info = {
     "name": "BDFR Advanced AutoRig",
     "author": "BDFR contributors",
-    "version": (0, 5, 0),
+    "version": (0, 6, 0),
     "blender": (4, 2, 0),
     "location": "View3D > Sidebar > Vehicle Rig",
     "description": "Analyze separate objects or disconnected mesh islands and create a vehicle armature",
@@ -26,6 +26,7 @@ TYPE_ITEMS = [
     ('TRUCK', 'Truck / Bus', 'Multiple axles supported'),
     ('MOTORCYCLE', 'Motorcycle', 'Two inline wheels'),
     ('BICYCLE', 'Bicycle', 'Two inline wheels'),
+    ('AIRPLANE', 'Airplane', 'Landing wheels, propellers and flight control surfaces'),
 ]
 PART_ITEMS = [
     ('BODY', 'Body', 'Chassis, engine and static parts'),
@@ -33,11 +34,28 @@ PART_ITEMS = [
     ('DOOR', 'Door', 'Door or hatch hinge'),
     ('HOOD', 'Hood', 'Front hood hinge'),
     ('TRUNK', 'Trunk', 'Rear trunk hinge'),
+    ('PROPELLER', 'Propeller', 'Spin around the aircraft forward axis'),
+    ('AILERON', 'Aileron', 'Wing roll control surface'),
+    ('ELEVATOR', 'Elevator', 'Horizontal tail pitch surface'),
+    ('RUDDER', 'Rudder', 'Vertical tail yaw surface'),
+    ('FLAP', 'Flap', 'Wing flap control surface'),
     ('IGNORE', 'Ignore', 'Do not add armature weights'),
 ]
 AXLE_ITEMS = [('AUTO', 'Auto', 'Determine the axle from the wheel position'),
               ('FRONT', 'Front', 'Front steering axle'),
               ('REAR', 'Rear', 'Rear axle')]
+STEER_ITEMS = [('AUTO', 'Auto', 'Steer the lone nose or tail landing wheel'),
+               ('YES', 'Yes', 'Make this landing wheel steerable'),
+               ('NO', 'No', 'Do not steer this landing wheel')]
+AIRCRAFT_SURFACES = {'AILERON', 'ELEVATOR', 'RUDDER', 'FLAP'}
+AIRCRAFT_RULES = [
+    ('PROPELLER', re.compile(r'propeller|prop[_ .-]|\bprop\b|hélice|ملخ', re.I)),
+    ('AILERON', re.compile(r'aileron|شهپر', re.I)),
+    ('ELEVATOR', re.compile(r'elevator|stabilator|سکان افقی', re.I)),
+    ('RUDDER', re.compile(r'rudder|سکان عمودی', re.I)),
+    ('FLAP', re.compile(r'flap|فلپ', re.I)),
+    ('WHEEL', re.compile(r'nose[_ .-]?gear|main[_ .-]?gear|tail[_ .-]?wheel|landing[_ .-]?wheel', re.I)),
+]
 NAME_RULES = [
     ('WHEEL', re.compile(r'wheel|tire|tyre|rim|roue|rad|چرخ|لاستیک', re.I)),
     ('DOOR', re.compile(r'door|porte|در[ب]?', re.I)),
@@ -150,18 +168,19 @@ def refresh_front_arrow(settings, context):
         arrow.hide_set(not settings.show_forward_indicator)
 
 
-def name_hint(ob):
+def name_hint(ob, vehicle_type=None):
     override = ob.get('vehicle_rig_part', '')
     if override in {v[0] for v in PART_ITEMS}:
         return override
-    for part, regex in NAME_RULES:
+    rules = (AIRCRAFT_RULES + NAME_RULES) if vehicle_type == 'AIRPLANE' else NAME_RULES
+    for part, regex in rules:
         if regex.search(ob.name):
             return part
     return None
 
 
 def classify(ob, lo, hi, global_lo, global_hi, settings, component_count):
-    hint = name_hint(ob)
+    hint = name_hint(ob, settings.vehicle_type)
     if hint:
         return hint, 'name / override'
     forward, left = axes(settings)
@@ -177,7 +196,9 @@ def classify(ob, lo, hi, global_lo, global_hi, settings, component_count):
     thin = size[lateral] < 0.85 * max(size[depth], size.z)
     at_bottom = center.z < global_lo.z + total.z * .72
     within_scale = total[depth] * .045 <= radius <= total[depth] * .34
-    if settings.vehicle_type in {'CAR', 'TRUCK'}:
+    if settings.vehicle_type == 'AIRPLANE':
+        on_side = True  # A nose or tail landing wheel lies on the centerline.
+    elif settings.vehicle_type in {'CAR', 'TRUCK'}:
         on_side = abs((center - global_center).dot(left)) > total[lateral] * .17
     else:
         on_side = abs((center - global_center).dot(left)) < total[lateral] * .35 + 1e-5
@@ -356,14 +377,45 @@ def wheel_labels(parts, settings):
     return names
 
 
+def steering_labels(parts, settings, labels):
+    """Choose aircraft nose/tail steering without steering its main landing gear."""
+    if settings.vehicle_type != 'AIRPLANE':
+        return {label for label in labels.values()
+                if label.startswith('F') or label == 'Front'}
+    members = defaultdict(list)
+    for index, label in labels.items():
+        members[label].append(parts[index])
+    front = {label for label in members if label.startswith('F') or label == 'Front'}
+    rear = {label for label in members if label.startswith('R') or label == 'Rear'}
+    steering = set()
+    for label, group in members.items():
+        choices = {getattr(p, 'wheel_steer', 'AUTO') for p in group} - {'AUTO'}
+        if len(choices) > 1:
+            raise ValueError('Conflicting steering overrides on the same landing wheel')
+        if choices:
+            if 'YES' in choices:
+                steering.add(label)
+            continue
+        if any(re.search(r'nose|tail[_ .-]?wheel|tail[_ .-]?gear',
+                         getattr(getattr(p, 'source', None), 'name', ''), re.I)
+               for p in group):
+            steering.add(label)
+        elif (len(front) == 1 and len(rear) > 1 and label in front or
+              len(rear) == 1 and len(front) > 1 and label in rear):
+            steering.add(label)
+    return steering
+
+
 def rig_bone_plan(parts, settings):
     """Count required controls and distribute extra spring bones across wheels."""
     labels = wheel_labels(parts, settings)
     wheels = sorted(set(labels.values()))
+    steering = steering_labels(parts, settings, labels)
     advanced = settings.rig_mode == 'ADVANCED'
-    hinges = sum(p.kind in {'DOOR', 'HOOD', 'TRUNK'} for p in parts) if advanced else 0
-    required = 2 + len(wheels) + sum(label.startswith('F') or label == 'Front'
-                                      for label in wheels) + hinges
+    moving = {'DOOR', 'HOOD', 'TRUNK'} | (AIRCRAFT_SURFACES if settings.vehicle_type == 'AIRPLANE' else set())
+    hinges = sum(p.kind in moving for p in parts) if advanced else 0
+    propellers = sum(p.kind == 'PROPELLER' for p in parts) if settings.vehicle_type == 'AIRPLANE' else 0
+    required = 2 + len(wheels) + len(steering) + hinges + propellers
     spring_segments = {label: 0 for label in wheels}
     if advanced:
         required += len(wheels)
@@ -409,6 +461,7 @@ def create_rig(context):
             raise ValueError('A mesh moved or changed shape; Analyze again')
     parts = list(settings.parts)
     names, spring_segments, required, actual = rig_bone_plan(parts, settings)
+    steering = steering_labels(parts, settings, names)
     lo, hi = Vector(settings.bounds_min), Vector(settings.bounds_max)
     center = (lo + hi) * .5
     height = max(hi.z - lo.z, .1)
@@ -418,7 +471,7 @@ def create_rig(context):
     rig = bpy.data.objects.new('Vehicle_Rig', arm_data)
     context.collection.objects.link(rig)
     rig.show_in_front = True
-    rig['vehicle_auto_rig_version'] = '0.5.0'
+    rig['vehicle_auto_rig_version'] = '0.6.0'
     rig['vehicle_type'] = settings.vehicle_type
     rig['rig_mode'] = settings.rig_mode
     rig['forward_axis'] = settings.forward_axis
@@ -441,14 +494,16 @@ def create_rig(context):
         spring_controls = {}
         for i, part in enumerate(parts):
             if part.kind in {'BODY', 'IGNORE'} or (settings.rig_mode == 'SIMPLE' and
-                                                  part.kind in {'DOOR', 'HOOD', 'TRUNK'}):
+                                                  part.kind in {'DOOR', 'HOOD', 'TRUNK'} |
+                                                  AIRCRAFT_SURFACES) or (settings.vehicle_type != 'AIRPLANE' and
+                                                  part.kind in AIRCRAFT_SURFACES | {'PROPELLER'}):
                 assignment[i] = None if part.kind == 'IGNORE' else 'Body'
                 continue
             p = Vector(part.center)
             if part.kind == 'WHEEL':
                 label = names[i]
                 wheel_name = 'Wheel.' + label
-                is_front = label.startswith('F') or label == 'Front'
+                is_front = label in steering
                 parent = 'Root'
                 if wheel_name not in created_wheels:
                     segments = spring_segments[label]
@@ -467,17 +522,26 @@ def create_rig(context):
                     bone(eb, wheel_name, p, p + left * reach, parent)
                     created_wheels.add(wheel_name)
                 assignment[i] = wheel_name
+            elif part.kind == 'PROPELLER':
+                bname = f'Propeller.{i + 1:03d}'
+                bone(eb, bname, p, p + forward * reach, 'Body')
+                assignment[i] = bname
             else:
                 prefix = part.kind.title()
                 bname = f'{prefix}.{i + 1:03d}'
                 # Pivot near outer edge for doors, at front/back end for lids.
                 pivot = p.copy()
                 half_span = abs((Vector(part.maximum) - Vector(part.minimum)).dot(forward)) * .45
-                if part.kind == 'HOOD':
+                if part.kind in AIRCRAFT_SURFACES:
+                    pivot += forward * half_span  # leading edge of a control surface
+                    axis = Vector((0, 0, 1)) if part.kind == 'RUDDER' else left
+                elif part.kind == 'HOOD':
                     pivot -= forward * half_span
+                    axis = Vector((0, 0, 1))
                 else:
                     pivot += forward * half_span
-                bone(eb, bname, pivot, pivot + Vector((0, 0, reach)), 'Body')
+                    axis = Vector((0, 0, 1))
+                bone(eb, bname, pivot, pivot + axis * reach, 'Body')
                 assignment[i] = bname
         bpy.ops.object.mode_set(mode='OBJECT')
         # Front steering and suspension remain animatable controls. Wheel
@@ -507,6 +571,9 @@ def create_rig(context):
                 var.name = 'var'; var.targets[0].id_type = 'ARMATURE'
                 var.targets[0].id = arm_data
                 var.targets[0].data_path = '["steer_degrees"]'
+        for pb in rig.pose.bones:
+            if pb.name.startswith('Propeller.'):
+                pb.rotation_mode = 'XYZ'
         for label, name in spring_controls.items():
             pb = rig.pose.bones[name]
             prop = 'suspension_front' if label.startswith('F') else 'suspension_rear'
@@ -720,6 +787,15 @@ def test_hinges(rig):
             axis, angle = left, -55
         elif name.startswith('Trunk.'):
             axis, angle = left, 55
+        elif name.startswith('Aileron.'):
+            axis = left
+            angle = 25 if (pb.bone.head_local - body_center).dot(left) >= 0 else -25
+        elif name.startswith('Elevator.'):
+            axis, angle = left, 20
+        elif name.startswith('Rudder.'):
+            axis, angle = Vector((0, 0, 1)), 28
+        elif name.startswith('Flap.'):
+            axis, angle = left, -35
         else:
             continue
         # Pose rotations use each bone's rest-local coordinates.
@@ -760,9 +836,10 @@ def create_test_animation(rig, scene):
     if TEST_STATE_KEY in rig:
         raise ValueError('Remove the current test animation before generating another')
     controls = test_controls(rig)
-    wheels = [pb for pb in rig.pose.bones if pb.name.startswith('Wheel.')]
+    wheels = [pb for pb in rig.pose.bones
+              if pb.name.startswith(('Wheel.', 'Propeller.'))]
     if not wheels:
-        raise ValueError('No wheel bones found on this rig')
+        raise ValueError('No wheel or propeller bones found on this rig')
     for owner in (rig, controls) if controls and controls != rig else (rig,):
         animation = owner.animation_data
         if animation and (animation.action or len(animation.nla_tracks)):
@@ -828,6 +905,7 @@ class VAR_Part(bpy.types.PropertyGroup):
     vertex_count: IntProperty()
     kind: EnumProperty(items=PART_ITEMS, name='Part')
     wheel_axle: EnumProperty(items=AXLE_ITEMS, name='Axle', default='AUTO')
+    wheel_steer: EnumProperty(items=STEER_ITEMS, name='Landing gear steering', default='AUTO')
     reason: StringProperty()
     center: bpy.props.FloatVectorProperty(size=3)
     minimum: bpy.props.FloatVectorProperty(size=3)
@@ -836,8 +914,8 @@ class VAR_Part(bpy.types.PropertyGroup):
 
 class VAR_Settings(bpy.types.PropertyGroup):
     vehicle_type: EnumProperty(items=TYPE_ITEMS, name='Vehicle')
-    rig_mode: EnumProperty(items=[('SIMPLE', 'Simple', 'Body, wheel and steering controls'),
-                               ('ADVANCED', 'Advanced', 'Suspension plus doors and hatches')],
+    rig_mode: EnumProperty(items=[('SIMPLE', 'Simple', 'Body, wheel, steering and propeller controls'),
+                               ('ADVANCED', 'Advanced', 'Suspension, hinges and flight surfaces')],
                            name='Rig Mode', default='SIMPLE')
     bone_count: IntProperty(name='Bone Count', default=16, min=2, max=128,
                             description='Target total bones in Advanced mode; required controls are always kept')
@@ -862,7 +940,7 @@ class VAR_Settings(bpy.types.PropertyGroup):
 class VAR_OT_Analyze(bpy.types.Operator):
     bl_idname = 'vehicle_auto_rig.analyze'
     bl_label = '1. Analyze Vehicle'
-    bl_description = 'Detect wheels and named moving parts; inspect and correct the list below'
+    bl_description = 'Detect wheels, propellers and named moving parts; inspect the list below'
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
@@ -979,7 +1057,7 @@ class VAR_OT_FrontArrow(bpy.types.Operator):
 class VAR_OT_TestRig(bpy.types.Operator):
     bl_idname = 'vehicle_auto_rig.test_functionality'
     bl_label = 'Create Test Animation'
-    bl_description = 'Keyframe doors, hood, trunk and wheel rotation for a short preview'
+    bl_description = 'Preview hinges, flight surfaces, wheels and propellers'
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -996,7 +1074,7 @@ class VAR_OT_TestRig(bpy.types.Operator):
         if (context.screen and not context.screen.is_animation_playing and
                 bpy.ops.screen.animation_play.poll()):
             bpy.ops.screen.animation_play()
-        self.report({'INFO'}, f'Test animation: {hinges} hinges and wheel rotation, frames 1–73')
+        self.report({'INFO'}, f'Test animation: {hinges} moving surfaces and wheel/propeller rotation, frames 1–73')
         return {'FINISHED'}
 
 
@@ -1052,7 +1130,7 @@ class VAR_PT_Panel(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         s = context.scene.vehicle_auto_rig
-        layout.label(text='BDFR Advanced AutoRig v0.5.0')
+        layout.label(text='BDFR Advanced AutoRig v0.6.0')
         layout.prop(s, 'vehicle_type')
         layout.prop(s, 'rig_mode', expand=True)
         if s.rig_mode == 'ADVANCED':
@@ -1087,12 +1165,17 @@ class VAR_PT_Panel(bpy.types.Panel):
                 if p.kind == 'WHEEL':
                     box.label(text='Wheel ' + wheel_names.get(i, '?'))
                     box.prop(p, 'wheel_axle', text='Front / Rear')
+                    if s.vehicle_type == 'AIRPLANE':
+                        box.prop(p, 'wheel_steer', text='Steering')
             if len(s.parts) > 100:
                 box.label(text=f'{len(s.parts) - 100} more; use object overrides')
             layout.operator('vehicle_auto_rig.build', icon='ARMATURE_DATA')
         box = layout.box()
         box.label(text='Object override (select parts):')
-        for part in ('WHEEL', 'BODY', 'DOOR', 'HOOD', 'TRUNK', 'IGNORE'):
+        available = (('WHEEL', 'BODY', 'PROPELLER', 'AILERON', 'ELEVATOR', 'RUDDER',
+                      'FLAP', 'DOOR', 'IGNORE') if s.vehicle_type == 'AIRPLANE' else
+                     ('WHEEL', 'BODY', 'DOOR', 'HOOD', 'TRUNK', 'IGNORE'))
+        for part in available:
             op = box.operator('vehicle_auto_rig.mark', text='Mark ' + part.title())
             op.part = part
         layout.label(text='Pose Root / Body bones for vehicle motion.')
@@ -1117,24 +1200,32 @@ class VAR_PT_Panel(bpy.types.Panel):
             box = layout.box()
             box.label(text='Animate rig controls:')
             controls = rig.data if 'steer_degrees' in rig.data else rig
-            box.prop(controls, '["steer_degrees"]', text='Steering (degrees)')
+            is_plane = rig.get('vehicle_type') == 'AIRPLANE'
+            if not is_plane or any(b.name.startswith('Steer.') for b in rig.data.bones):
+                box.prop(controls, '["steer_degrees"]',
+                         text='Nose / tail steering' if is_plane else 'Steering (degrees)')
             if 'suspension_front' in controls:
                 box.prop(controls, '["suspension_front"]', text='Front suspension')
                 box.prop(controls, '["suspension_rear"]', text='Rear suspension')
             front_count = sum(b.name.startswith('Wheel.F') for b in rig.data.bones)
             rear_count = sum(b.name.startswith(('Wheel.R', 'Wheel.Rear')) for b in rig.data.bones)
-            box.label(text=f'Front wheels: {front_count}  /  Rear wheels: {rear_count}')
+            box.label(text=(f'Front gear: {front_count}  /  Rear gear: {rear_count}' if is_plane
+                            else f'Front wheels: {front_count}  /  Rear wheels: {rear_count}'))
+            if is_plane:
+                box.label(text='Pose Propeller / Aileron / Elevator / Rudder / Flap bones')
             preview = layout.box()
             preview.label(text='Test Rig Functionality', icon='PLAY')
             if TEST_STATE_KEY in rig:
                 preview.operator('vehicle_auto_rig.play_test_functionality', icon='PLAY')
                 preview.operator('vehicle_auto_rig.clear_test_functionality', icon='TRASH')
-                preview.label(text='Frames 1-73: doors, hood, trunk, wheels')
+                preview.label(text=('Frames 1-73: controls, gear, propellers' if is_plane
+                                    else 'Frames 1-73: doors, hood, trunk, wheels'))
             else:
                 preview.operator('vehicle_auto_rig.test_functionality', text='Create & Play Test',
                                  icon='ACTION')
                 if rig.get('rig_mode') != 'ADVANCED':
-                    preview.label(text='Use Advanced rig for doors and hatches')
+                    preview.label(text=('Use Advanced for flight controls' if is_plane
+                                        else 'Use Advanced rig for doors and hatches'))
 
 
 CLASSES = (VAR_Part, VAR_Settings, VAR_OT_Analyze, VAR_OT_Rig, VAR_OT_Mark,

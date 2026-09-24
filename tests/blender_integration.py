@@ -219,6 +219,75 @@ assert (scene.frame_start, scene.frame_end, scene.frame_current) == (12, 180, 48
 assert '_bdfr_test_rig_state' not in rig
 assert all((world_vertex(ob) - closed[i]).length < 1e-4
            for i, ob in enumerate((door, hood, trunk, wheels[0], body)))
+
+
+def airplane(mode):
+    print(f'Building synthetic airplane, mode={mode}', flush=True)
+    for ob in list(bpy.data.objects):
+        bpy.data.objects.remove(ob, do_unlink=True)
+    body = box('Fuselage', (0, 0, 1.4), (1.1, 5, .7))
+    wing_l = box('Wing_L', (-2, 0, 1.5), (3.3, 1.1, .12))
+    wing_r = box('Wing_R', (2, 0, 1.5), (3.3, 1.1, .12))
+    wheels = [box('NoseGear', (0, 1.8, .35), (.18, .55, .55)),
+              box('MainGear_L', (-.8, -.9, .35), (.18, .55, .55)),
+              box('MainGear_R', (.8, -.9, .35), (.18, .55, .55))]
+    prop = box('Propeller_1', (0, 2.65, 1.4), (1.4, .12, .16))
+    surfaces = [box('Aileron_L', (-3, -.45, 1.5), (.75, .3, .08)),
+                box('Aileron_R', (3, -.45, 1.5), (.75, .3, .08)),
+                box('Elevator_L', (-.8, -2.4, 1.5), (.9, .35, .08)),
+                box('Rudder_1', (0, -2.35, 1.85), (.09, .35, .7)),
+                box('Flap_L', (-1.45, -.5, 1.5), (.55, .3, .08))]
+    meshes = [body, wing_l, wing_r, *wheels, prop, *surfaces]
+    bpy.ops.object.select_all(action='DESELECT')
+    for ob in meshes:
+        ob.select_set(True)
+    bpy.context.view_layer.objects.active = body
+    s = bpy.context.scene.vehicle_auto_rig
+    s.vehicle_type, s.forward_axis, s.forward_sign = 'AIRPLANE', 'Y', 'PLUS'
+    s.rig_mode, s.bone_count = mode, 21
+    count, regions = addon.analyze(bpy.context)
+    assert count == len(meshes) and regions == count
+    assert [p.kind for p in s.parts].count('WHEEL') == 3
+    for kind in ('PROPELLER', 'AILERON', 'ELEVATOR', 'RUDDER', 'FLAP'):
+        assert kind in {p.kind for p in s.parts}, kind
+    rig, wheel_count, bound_count = addon.create_rig(bpy.context)
+    assert wheel_count == 3 and bound_count == len(meshes)
+    assert all(ob.parent == rig for ob in meshes)
+    assert bpy.data.objects[rig['forward_indicator_name']].parent == rig
+    assert sum(b.name.startswith('Steer.') for b in rig.data.bones) == 1
+    assert prop.vertex_groups.get('Propeller.007') or any(
+        group.name.startswith('Propeller.') for group in prop.vertex_groups)
+    assert_move(body, lambda: setattr(rig.location, 'x', rig.location.x + 1), (1, 0, 0))
+    return rig, body, wheels, prop, surfaces
+
+
+rig, body, wheels, prop, surfaces = airplane('SIMPLE')
+print('Checking simple airplane and rotating propeller', flush=True)
+assert len(rig.data.bones) == 7
+assert all(ob.vertex_groups.get('Body') for ob in surfaces)
+prop_bone = next(pb for pb in rig.pose.bones if pb.name.startswith('Propeller.'))
+before = world_vertex(prop)
+prop_bone.rotation_euler.y = .8
+bpy.context.view_layer.update()
+assert (world_vertex(prop) - before).length > .1
+
+rig, body, wheels, prop, surfaces = airplane('ADVANCED')
+print('Checking advanced aircraft controls and preview', flush=True)
+assert len(rig.data.bones) == 21
+assert all(any(group.name.startswith(ob.name.split('_')[0] + '.') for group in ob.vertex_groups)
+           for ob in surfaces)
+assert len([b for b in rig.data.bones if b.name.startswith('Suspension.')]) >= 3
+before = [world_vertex(ob) for ob in [*surfaces, prop, body]]
+count = addon.create_test_animation(rig, bpy.context.scene)
+assert count == len(surfaces)
+bpy.context.scene.frame_set(19)
+after = [world_vertex(ob) for ob in [*surfaces, prop, body]]
+assert all((a - b).length > .01 for a, b in zip(after[:-1], before[:-1])), (
+    [(a - b).length for a, b in zip(after, before)])
+assert (after[-1] - before[-1]).length < 1e-4
+addon.clear_test_animation(rig, bpy.context.scene)
+assert all((world_vertex(ob) - previous).length < 1e-4
+           for ob, previous in zip([*surfaces, prop, body], before))
 print('PASS: simple/advanced rigs, bone budget, suspension, hierarchy and repair', flush=True)
 # Standalone bpy can spend a long time in native shutdown even after success.
 os._exit(0)

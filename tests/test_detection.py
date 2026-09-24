@@ -71,9 +71,37 @@ parts2 = [mkpart((0,.75,.35),(-.08,.40,0),(.08,1.1,.7)),
 assert rig.wheel_labels(parts2, settings) == {0:'Front', 1:'Rear'}
 parts2[0].wheel_axle, parts2[1].wheel_axle = 'REAR', 'FRONT'
 assert rig.wheel_labels(parts2, settings) == {0:'Rear', 1:'Front'}
+settings.vehicle_type = 'AIRPLANE'
+settings.bounds_min, settings.bounds_max = (-4,-3,0), (4,3,2.5)
+plane_wheels = [
+    NS(**vars(mkpart((0,2,.35),(-.1,1.8,0),(.1,2.2,.7))), source=NS(name='NoseGear')),
+    NS(**vars(mkpart((-1,-1,.35),(-1.1,-1.2,0),(-.9,-.8,.7))), source=NS(name='MainGear_L')),
+    NS(**vars(mkpart((1,-1,.35),(.9,-1.2,0),(1.1,-.8,.7))), source=NS(name='MainGear_R')),
+]
+plane_labels = rig.wheel_labels(plane_wheels, settings)
+assert len(set(plane_labels.values())) == 3
+assert rig.steering_labels(plane_wheels, settings, plane_labels) == {plane_labels[0]}
+plane_wheels[0].wheel_steer = 'NO'
+assert rig.steering_labels(plane_wheels, settings, plane_labels) == set()
+plane_wheels[1].wheel_steer = 'YES'
+assert rig.steering_labels(plane_wheels, settings, plane_labels) == {plane_labels[1]}
+plane_wheels[0].wheel_steer, plane_wheels[1].wheel_steer = 'AUTO', 'AUTO'
+plane_parts = plane_wheels + [NS(kind=k) for k in ('PROPELLER','AILERON','AILERON',
+                                                   'ELEVATOR','RUDDER','FLAP')]
+settings.rig_mode, settings.bone_count = 'SIMPLE', 2
+assert rig.rig_bone_plan(plane_parts, settings)[2:] == (7, 7)
+settings.rig_mode, settings.bone_count = 'ADVANCED', 20
+assert rig.rig_bone_plan(plane_parts, settings)[2:] == (15, 20)
+for name, expected in [('NoseGear', 'WHEEL'), ('MainGear_L', 'WHEEL'),
+                       ('Propeller_1', 'PROPELLER'), ('Aileron_L', 'AILERON'),
+                       ('Elevator', 'ELEVATOR'), ('Rudder', 'RUDDER'), ('Flap_L', 'FLAP')]:
+    assert rig.name_hint(NS(name=name, get=lambda key, default=None: default),
+                         'AIRPLANE') == expected, name
+assert rig.name_hint(NS(name='Aileron_L', get=lambda key, default=None: default),
+                     'CAR') is None
 mesh = NS(vertices=[NS(co=V((i,0,0))) for i in range(6)],
           edges=[NS(vertices=(0,1)),NS(vertices=(1,2)),
                  NS(vertices=(3,4)),NS(vertices=(4,5))])
 obj = NS(data=mesh)
 assert rig.components(obj, True, 1000) == [[0,1,2],[3,4,5]]
-print('PASS: classification, front/rear overrides, islands and bone budgets')
+print('PASS: vehicle and aircraft classification, steering overrides, islands and bone budgets')
