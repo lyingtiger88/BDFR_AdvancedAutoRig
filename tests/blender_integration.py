@@ -182,6 +182,8 @@ addon.clear_test_animation(rig, scene)
 assert not rig.animation_data.action and not rig.data.animation_data.action
 assert (scene.frame_start, scene.frame_end, scene.frame_current) == (12, 180, 48)
 assert '_bdfr_test_rig_state' not in rig
+assert all((world_vertex(ob) - closed[i]).length < 1e-4
+           for i, ob in enumerate((door, hood, trunk, wheels[0], body)))
 print('PASS: simple/advanced rigs, bone budget, suspension, hierarchy and repair', flush=True)
 # Standalone bpy can spend a long time in native shutdown even after success.
 os._exit(0)
