@@ -60,7 +60,8 @@ def assert_move(ob, move_rig, expected):
         ob.name, tuple(actual), expected)
 
 
-def setup(parented=False, mode='SIMPLE', bone_count=16, with_door=False):
+def setup(parented=False, mode='SIMPLE', bone_count=16, with_door=False,
+          with_hinges=False):
     print(f'Building synthetic vehicle, parented={parented}, mode={mode}', flush=True)
     for ob in list(bpy.data.objects):
         bpy.data.objects.remove(ob, do_unlink=True)
@@ -74,16 +75,20 @@ def setup(parented=False, mode='SIMPLE', bone_count=16, with_door=False):
         for fore in (-1, 1):
             wheels.append(box(f'Wheel_{side}_{fore}', (side * .9, fore * 1.1, .42),
                               (.22, .82, .82), holder))
-    door = box('Door_L', (-.92, .1, 1), (.1, .8, .7), holder) if with_door else None
+    door = box('Door_L', (-.92, .1, 1), (.1, .8, .7), holder) if (with_door or with_hinges) else None
+    hood = box('Hood', (0, 1.1, 1.2), (1.5, .8, .12), holder) if with_hinges else None
+    trunk = box('Trunk', (0, -1.2, 1.1), (1.5, .6, .12), holder) if with_hinges else None
     bpy.ops.object.select_all(action='DESELECT')
-    for item in ([holder] if holder else [body, *wheels, *([door] if door else [])]):
+    for item in ([holder] if holder else [body, *wheels,
+                                         *([door] if door else []),
+                                         *([hood, trunk] if with_hinges else [])]):
         item.select_set(True)
     bpy.context.view_layer.objects.active = holder or body
     s = bpy.context.scene.vehicle_auto_rig
     s.vehicle_type, s.forward_axis, s.forward_sign = 'CAR', 'Y', 'PLUS'
     s.rig_mode, s.bone_count = mode, bone_count
     objects, parts = addon.analyze(bpy.context)
-    assert objects == 5 + bool(door) and parts >= objects
+    assert objects == 5 + bool(door) + 2 * with_hinges and parts >= objects
     print('Analysis complete', flush=True)
     rig, wheel_count, bound_count = addon.create_rig(bpy.context)
     print('Rig construction complete', flush=True)
@@ -154,6 +159,29 @@ holder, body, wheels, door, rig = setup(False, mode='ADVANCED', bone_count=2,
                                         with_door=True)
 print('Checking minimum bone count', flush=True)
 assert len(rig.data.bones) == 13 and rig['bone_count'] == 13
+
+# Preview generates and removes dedicated actions, leaving body and timeline
+# intact while cycling all three hinges and the wheel roll driver.
+holder, body, wheels, door, rig = setup(False, mode='ADVANCED', bone_count=18,
+                                        with_hinges=True)
+scene = bpy.context.scene
+scene.frame_start, scene.frame_end = 12, 180
+scene.frame_set(48)
+hood, trunk = bpy.data.objects['Hood'], bpy.data.objects['Trunk']
+count = addon.create_test_animation(rig, scene)
+print('Checking Test Rig Functionality animation', flush=True)
+assert count == 3 and scene.frame_start == 1 and scene.frame_end == 73
+assert rig.animation_data.action and rig.data.animation_data.action
+closed = [world_vertex(ob) for ob in (door, hood, trunk, wheels[0], body)]
+scene.frame_set(19)
+opened = [world_vertex(ob) for ob in (door, hood, trunk, wheels[0], body)]
+assert all((opened[i] - closed[i]).length > .03 for i in range(4)), (
+    [(opened[i] - closed[i]).length for i in range(4)])
+assert (opened[4] - closed[4]).length < 1e-4
+addon.clear_test_animation(rig, scene)
+assert not rig.animation_data.action and not rig.data.animation_data.action
+assert (scene.frame_start, scene.frame_end, scene.frame_current) == (12, 180, 48)
+assert '_bdfr_test_rig_state' not in rig
 print('PASS: simple/advanced rigs, bone budget, suspension, hierarchy and repair', flush=True)
 # Standalone bpy can spend a long time in native shutdown even after success.
 os._exit(0)

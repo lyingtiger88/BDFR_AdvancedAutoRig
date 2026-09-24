@@ -3,7 +3,7 @@
 bl_info = {
     "name": "BDFR Advanced AutoRig",
     "author": "BDFR contributors",
-    "version": (0, 2, 0),
+    "version": (0, 3, 0),
     "blender": (4, 2, 0),
     "location": "View3D > Sidebar > Vehicle Rig",
     "description": "Analyze separate objects or disconnected mesh islands and create a vehicle armature",
@@ -11,6 +11,8 @@ bl_info = {
 }
 
 import re
+import json
+import math
 from collections import defaultdict
 
 import bpy
@@ -343,9 +345,11 @@ def create_rig(context):
     rig = bpy.data.objects.new('Vehicle_Rig', arm_data)
     context.collection.objects.link(rig)
     rig.show_in_front = True
-    rig['vehicle_auto_rig_version'] = '0.2.0'
+    rig['vehicle_auto_rig_version'] = '0.3.0'
     rig['vehicle_type'] = settings.vehicle_type
     rig['rig_mode'] = settings.rig_mode
+    rig['forward_axis'] = settings.forward_axis
+    rig['forward_sign'] = settings.forward_sign
     rig['bone_count'] = actual
     parent_changes = []
     try:
@@ -522,6 +526,111 @@ def repair_rig_parenting(rig):
     return len(changes), len(meshes)
 
 
+TEST_STATE_KEY = '_bdfr_test_rig_state'
+
+
+def test_controls(rig):
+    """New rigs store controls on Armature data; earlier builds used the Object."""
+    return rig.data if 'wheel_roll_degrees' in rig.data else rig
+
+
+def test_hinges(rig):
+    forward = Vector((0, 1, 0)) if rig.get('forward_axis', 'Y') == 'Y' else Vector((1, 0, 0))
+    if rig.get('forward_sign', 'PLUS') == 'MINUS':
+        forward.negate()
+    left = Vector((-forward.y, forward.x, 0))
+    body = rig.data.bones.get('Body')
+    body_center = body.head_local if body else Vector((0, 0, 0))
+    for pb in rig.pose.bones:
+        name = pb.name
+        if name.startswith('Door.'):
+            axis, angle = Vector((0, 0, 1)), (-65 if (pb.bone.head_local - body_center).dot(left) >= 0 else 65)
+        elif name.startswith('Hood.'):
+            axis, angle = left, -55
+        elif name.startswith('Trunk.'):
+            axis, angle = left, 55
+        else:
+            continue
+        # Pose rotations use each bone's rest-local coordinates.
+        local_axis = (pb.bone.matrix_local.to_3x3().inverted() @ axis).normalized()
+        yield pb, local_axis, math.radians(angle)
+
+
+def clear_test_animation(rig, scene):
+    if TEST_STATE_KEY not in rig:
+        raise ValueError('No test animation exists on this rig')
+    state = json.loads(rig[TEST_STATE_KEY])
+    controls = test_controls(rig)
+    for owner, name in ((rig, state.get('rig_action')), (controls, state.get('controls_action'))):
+        if not name:
+            continue
+        action = bpy.data.actions.get(name)
+        animation = owner.animation_data
+        if action and animation and animation.action == action:
+            animation.action = None
+        if action and action.users == 0:
+            bpy.data.actions.remove(action)
+    controls['wheel_roll_degrees'] = state['wheel_roll']
+    controls.update_tag()
+    for name, saved in state['hinges'].items():
+        pb = rig.pose.bones.get(name)
+        if pb:
+            pb.rotation_mode = saved['mode']
+            pb.rotation_axis_angle = saved['axis_angle']
+            pb.rotation_euler = saved['euler']
+            pb.rotation_quaternion = saved['quaternion']
+    scene.frame_start, scene.frame_end = state['frame_start'], state['frame_end']
+    scene.frame_set(state['frame'])
+    del rig[TEST_STATE_KEY]
+
+
+def create_test_animation(rig, scene):
+    if TEST_STATE_KEY in rig:
+        raise ValueError('Remove the current test animation before generating another')
+    controls = test_controls(rig)
+    if 'wheel_roll_degrees' not in controls:
+        raise ValueError('This rig has no wheel roll control')
+    for owner in {rig, controls}:
+        animation = owner.animation_data
+        if animation and (animation.action or len(animation.nla_tracks)):
+            raise ValueError('This rig already has animation; test on an unanimated copy')
+    hinges = list(test_hinges(rig))
+    state = {
+        'frame': scene.frame_current, 'frame_start': scene.frame_start,
+        'frame_end': scene.frame_end, 'wheel_roll': float(controls['wheel_roll_degrees']),
+        'hinges': {pb.name: {'mode': pb.rotation_mode,
+                             'axis_angle': list(pb.rotation_axis_angle),
+                             'euler': list(pb.rotation_euler),
+                             'quaternion': list(pb.rotation_quaternion)}
+                   for pb, _, _ in hinges},
+    }
+    rig[TEST_STATE_KEY] = json.dumps(state)
+    try:
+        for pb, axis, angle in hinges:
+            pb.rotation_mode = 'AXIS_ANGLE'
+            for frame, value in ((1, 0), (19, angle), (37, angle), (55, 0), (73, 0)):
+                pb.rotation_axis_angle = (value, *axis)
+                pb.keyframe_insert(data_path='rotation_axis_angle', frame=frame,
+                                   group='Test Rig Functionality')
+        for frame, value in ((1, 0), (19, 90), (37, 180), (55, 270), (73, 360)):
+            controls['wheel_roll_degrees'] = value
+            controls.keyframe_insert(data_path='["wheel_roll_degrees"]', frame=frame,
+                                     group='Test Rig Functionality')
+        state['rig_action'] = rig.animation_data.action.name if rig.animation_data and rig.animation_data.action else None
+        state['controls_action'] = controls.animation_data.action.name
+        rig[TEST_STATE_KEY] = json.dumps(state)
+        scene.frame_start, scene.frame_end = 1, 73
+        scene.frame_set(1)
+        return len(hinges)
+    except Exception:
+        state['rig_action'] = rig.animation_data.action.name if rig.animation_data and rig.animation_data.action else None
+        state['controls_action'] = (controls.animation_data.action.name if controls.animation_data
+                                     and controls.animation_data.action else None)
+        rig[TEST_STATE_KEY] = json.dumps(state)
+        clear_test_animation(rig, scene)
+        raise
+
+
 class VAR_Part(bpy.types.PropertyGroup):
     source: PointerProperty(type=bpy.types.Object)
     region_index: IntProperty()
@@ -626,6 +735,48 @@ class VAR_OT_Repair(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class VAR_OT_TestRig(bpy.types.Operator):
+    bl_idname = 'vehicle_auto_rig.test_functionality'
+    bl_label = 'Create Test Animation'
+    bl_description = 'Keyframe doors, hood, trunk and wheel rotation for a short preview'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        rig = context.active_object
+        return bool(rig and rig.type == 'ARMATURE' and rig.get('vehicle_auto_rig_version'))
+
+    def execute(self, context):
+        try:
+            hinges = create_test_animation(context.active_object, context.scene)
+        except Exception as exc:
+            self.report({'ERROR'}, str(exc))
+            return {'CANCELLED'}
+        self.report({'INFO'}, f'Test animation created: {hinges} hinges and wheel rotation; play frames 1–73')
+        return {'FINISHED'}
+
+
+class VAR_OT_ClearTestRig(bpy.types.Operator):
+    bl_idname = 'vehicle_auto_rig.clear_test_functionality'
+    bl_label = 'Remove Test Animation'
+    bl_description = 'Remove preview keyframes and restore the previous timeline and pose'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        rig = context.active_object
+        return bool(rig and rig.type == 'ARMATURE' and TEST_STATE_KEY in rig)
+
+    def execute(self, context):
+        try:
+            clear_test_animation(context.active_object, context.scene)
+        except Exception as exc:
+            self.report({'ERROR'}, str(exc))
+            return {'CANCELLED'}
+        self.report({'INFO'}, 'Test animation removed; timeline and pose restored')
+        return {'FINISHED'}
+
+
 class VAR_PT_Panel(bpy.types.Panel):
     bl_label = 'Vehicle Auto Rig'
     bl_idname = 'VAR_PT_vehicle_auto_rig'
@@ -678,11 +829,20 @@ class VAR_PT_Panel(bpy.types.Panel):
             if 'suspension_front' in controls:
                 box.prop(controls, '["suspension_front"]', text='Front suspension')
                 box.prop(controls, '["suspension_rear"]', text='Rear suspension')
+            preview = layout.box()
+            preview.label(text='Test Rig Functionality', icon='PLAY')
+            if TEST_STATE_KEY in rig:
+                preview.operator('vehicle_auto_rig.clear_test_functionality', icon='TRASH')
+                preview.label(text='Play frames 1-73 in Timeline')
+            else:
+                preview.operator('vehicle_auto_rig.test_functionality', icon='ACTION')
+                if rig.get('rig_mode') != 'ADVANCED':
+                    preview.label(text='Use Advanced rig for doors and hatches')
             layout.operator('vehicle_auto_rig.repair_parenting', icon='CON_ARMATURE')
 
 
 CLASSES = (VAR_Part, VAR_Settings, VAR_OT_Analyze, VAR_OT_Rig, VAR_OT_Mark,
-           VAR_OT_Repair, VAR_PT_Panel)
+           VAR_OT_Repair, VAR_OT_TestRig, VAR_OT_ClearTestRig, VAR_PT_Panel)
 
 
 def register():
