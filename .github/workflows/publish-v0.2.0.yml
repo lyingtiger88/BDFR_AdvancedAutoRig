@@ -1,0 +1,45 @@
+name: Publish v0.2.0 preview
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-v0.2.0.yml'
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate add-on ZIP
+        run: |
+          python - <<'PY'
+          from zipfile import ZipFile
+          from pathlib import Path
+          p = Path('dist/BDFR_AdvancedAutoRig-0.2.0.zip')
+          with ZipFile(p) as z:
+              assert z.testzip() is None
+              assert z.namelist() == ['vehicle_auto_rig/__init__.py']
+              assert z.read('vehicle_auto_rig/__init__.py') == Path('vehicle_auto_rig/__init__.py').read_bytes()
+          PY
+      - name: Install Blender Python module
+        run: python -m pip install bpy==4.5.14
+      - name: Verify both rig modes in Blender
+        run: timeout 120s python -u tests/blender_integration.py
+      - name: Create release and attach ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v0.2.0 >/dev/null 2>&1; then
+            gh release upload v0.2.0 dist/BDFR_AdvancedAutoRig-0.2.0.zip --clobber
+          else
+            gh release create v0.2.0 dist/BDFR_AdvancedAutoRig-0.2.0.zip \
+              --target "$GITHUB_SHA" \
+              --title 'BDFR Advanced AutoRig v0.2.0' \
+              --notes-file docs/releases/v0.2.0.md \
+              --prerelease
+          fi
