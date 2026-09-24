@@ -1,4 +1,4 @@
-"""Run inside mayapy or Maya's Python Script Editor to verify actual skin deformation.
+"""Run in a dedicated mayapy process to verify actual skin deformation.
 
     mayapy tests/maya_integration.py
 """
@@ -11,12 +11,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 try:
     import maya.standalone
     maya.standalone.initialize(name='python')
-except (ImportError, RuntimeError):
-    # The Script Editor already has Maya initialized; do not initialize twice.
+except RuntimeError:
+    # Some mayapy environments initialize standalone before this script starts.
     pass
 
 from maya import cmds
 from maya_autorig import Options, analyze_selection, build_rig
+
+if not cmds.about(batch=True):
+    raise RuntimeError('Run this destructive fixture only in a dedicated mayapy process')
 
 
 def pos(mesh):
