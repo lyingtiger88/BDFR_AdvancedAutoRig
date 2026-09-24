@@ -1,0 +1,26 @@
+name: Publish v0.1.0 preview
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-v0.1.0.yml'
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create release and attach installable ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v0.1.0 >/dev/null 2>&1; then
+            gh release upload v0.1.0 dist/BDFR_AdvancedAutoRig-0.1.0.zip --clobber
+          else
+            gh release create v0.1.0 dist/BDFR_AdvancedAutoRig-0.1.0.zip \
+              --target "$GITHUB_SHA" \
+              --title 'BDFR Advanced AutoRig v0.1.0' \
+              --notes-file RELEASE_NOTES.md \
+              --prerelease
+          fi
