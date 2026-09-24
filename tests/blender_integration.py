@@ -103,19 +103,10 @@ assert_move(wheels[0], lambda: setattr(rig.location, 'y', rig.location.y - 1), (
 # Driver controls must actually affect the mesh (not merely exist in the UI).
 wheel_before = world_vertex(wheels[0])
 rig.data['wheel_roll_degrees'] = 40
-bpy.context.view_layer.update()
-print('Roll debug:', tuple(world_vertex(wheels[0]) - wheel_before),
-      rig.data['wheel_roll_degrees'],
-      tuple(rig.evaluated_get(bpy.context.evaluated_depsgraph_get()).pose.bones['Wheel.RR'].rotation_euler),
-      [(curve.data_path, curve.array_index, curve.driver.is_valid,
-        curve.driver.variables[0].type,
-        curve.driver.variables[0].targets[0].id_type,
-        str(curve.driver.variables[0].targets[0].id),
-        curve.driver.variables[0].targets[0].data_path)
-       for curve in rig.animation_data.drivers][:2], flush=True)
+# Programmatic ID-property changes need an explicit dependency graph tag;
+# editing the control in Blender's UI supplies that update automatically.
 rig.data.update_tag()
 bpy.context.view_layer.update()
-print('Roll after data tag:', tuple(world_vertex(wheels[0]) - wheel_before), flush=True)
 assert (world_vertex(wheels[0]) - wheel_before).length > .05
 # A Root pose control must still move weighted mesh vertices in Pose Mode.
 before_pose = world_vertex(body)
@@ -153,9 +144,8 @@ front = next(w for w in wheels if w.location.y > 0)
 rear = next(w for w in wheels if w.location.y < 0)
 front_before, rear_before, body_before = map(world_vertex, (front, rear, body))
 rig.data['suspension_front'] = .25
+rig.data.update_tag()
 bpy.context.view_layer.update()
-print('Suspension debug:', tuple(world_vertex(front) - front_before),
-      tuple(rig.evaluated_get(bpy.context.evaluated_depsgraph_get()).pose.bones['Suspension.FL.01'].location), flush=True)
 assert ((world_vertex(front) - front_before) - Vector((0, 0, .25))).length < 1e-4
 assert (world_vertex(rear) - rear_before).length < 1e-4
 assert (world_vertex(body) - body_before).length < 1e-4
