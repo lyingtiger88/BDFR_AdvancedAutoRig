@@ -107,8 +107,15 @@ bpy.context.view_layer.update()
 print('Roll debug:', tuple(world_vertex(wheels[0]) - wheel_before),
       rig.data['wheel_roll_degrees'],
       tuple(rig.evaluated_get(bpy.context.evaluated_depsgraph_get()).pose.bones['Wheel.RR'].rotation_euler),
-      [(curve.data_path, curve.array_index, curve.driver.is_valid)
+      [(curve.data_path, curve.array_index, curve.driver.is_valid,
+        curve.driver.variables[0].type,
+        curve.driver.variables[0].targets[0].id_type,
+        str(curve.driver.variables[0].targets[0].id),
+        curve.driver.variables[0].targets[0].data_path)
        for curve in rig.animation_data.drivers][:2], flush=True)
+rig.data.update_tag()
+bpy.context.view_layer.update()
+print('Roll after data tag:', tuple(world_vertex(wheels[0]) - wheel_before), flush=True)
 assert (world_vertex(wheels[0]) - wheel_before).length > .05
 # A Root pose control must still move weighted mesh vertices in Pose Mode.
 before_pose = world_vertex(body)
