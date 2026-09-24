@@ -89,10 +89,25 @@ def setup(parented=False, mode='SIMPLE', bone_count=16, with_door=False,
     s.rig_mode, s.bone_count = mode, bone_count
     objects, parts = addon.analyze(bpy.context)
     assert objects == 5 + bool(door) + 2 * with_hinges and parts >= objects
+    marker = s.indicator_object
+    assert marker and marker.type == 'EMPTY' and marker.name == 'BDFR FRONT (+Y)'
+    assert marker.hide_render and marker.hide_select and marker.show_name
+    assert (marker.rotation_quaternion @ Vector((0, 0, 1)) - Vector((0, 1, 0))).length < 1e-5
+    assert marker.matrix_world.translation.y > body.matrix_world.translation.y
+    if not parented:
+        s.forward_sign = 'MINUS'
+        assert marker.name == 'BDFR FRONT (-Y)'
+        assert (marker.rotation_quaternion @ Vector((0, 0, 1)) - Vector((0, -1, 0))).length < 1e-5
+        s.forward_axis, s.forward_sign = 'X', 'PLUS'
+        assert marker.name == 'BDFR FRONT (+X)'
+        assert (marker.rotation_quaternion @ Vector((0, 0, 1)) - Vector((1, 0, 0))).length < 1e-5
+        s.forward_axis = 'Y'
     print('Analysis complete', flush=True)
     rig, wheel_count, bound_count = addon.create_rig(bpy.context)
     print('Rig construction complete', flush=True)
     assert wheel_count == 4 and bound_count == objects
+    assert marker.parent == rig and rig['forward_indicator_name'] == marker.name
+    assert s.indicator_object is None
     return holder, body, wheels, door, rig
 
 
@@ -103,7 +118,15 @@ assert all(ob.parent == rig for ob in [body, *wheels, door])
 assert len(rig.data.bones) == 8
 assert not any(b.name.startswith(('Suspension.', 'Door.')) for b in rig.data.bones)
 assert door.vertex_groups.get('Body')
+marker = bpy.data.objects[rig['forward_indicator_name']]
+before_marker = marker.matrix_world.translation.copy()
 assert_move(body, lambda: setattr(rig.location, 'x', rig.location.x + 2), (2, 0, 0))
+assert ((marker.matrix_world.translation - before_marker) - Vector((2, 0, 0))).length < 1e-4
+s = bpy.context.scene.vehicle_auto_rig
+s.show_forward_indicator = False
+assert marker.hide_get()
+s.show_forward_indicator = True
+assert not marker.hide_get()
 assert_move(wheels[0], lambda: setattr(rig.location, 'y', rig.location.y - 1), (0, -1, 0))
 # Wheel rotation can be posed directly; there is no extra Roll slider.
 assert 'wheel_roll_degrees' not in rig.data
@@ -143,6 +166,11 @@ print('Checking v0.1.0 repair', flush=True)
 assert roots == 1 and count == 5
 assert holder.parent == rig and body.parent == holder
 assert_move(wheels[0], lambda: setattr(rig.location, 'x', 1), (1, 0, 0))
+old_marker = bpy.data.objects[rig['forward_indicator_name']]
+bpy.data.objects.remove(old_marker, do_unlink=True)
+restored_marker = addon.ensure_rig_front_arrow(bpy.context, rig)
+assert restored_marker.parent == rig and rig['forward_indicator_name'] == restored_marker.name
+assert (restored_marker.rotation_quaternion @ Vector((0, 0, 1)) - Vector((0, 1, 0))).length < 1e-5
 
 # Advanced adds driven suspension chains and hinges. The slider sets the
 # requested total; required wheel/steer/hinge bones remain even below minimum.

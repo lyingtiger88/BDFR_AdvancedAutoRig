@@ -3,7 +3,7 @@
 bl_info = {
     "name": "BDFR Advanced AutoRig",
     "author": "BDFR contributors",
-    "version": (0, 4, 0),
+    "version": (0, 5, 0),
     "blender": (4, 2, 0),
     "location": "View3D > Sidebar > Vehicle Rig",
     "description": "Analyze separate objects or disconnected mesh islands and create a vehicle armature",
@@ -102,6 +102,53 @@ def axes(settings):
     return Vector((sign, 0, 0)), Vector((0, sign, 0))
 
 
+def front_arrow(context, bounds_min, bounds_max, forward, existing=None):
+    """Place a viewport-only arrow above the front of the vehicle."""
+    lo, hi = Vector(bounds_min), Vector(bounds_max)
+    size = hi - lo
+    center = (lo + hi) * .5
+    radius = max(size.length * .14, .12)
+    front = center + forward * (abs(forward.x) * size.x + abs(forward.y) * size.y) * .5
+    front.z = hi.z + max(radius * .5, .06)
+    arrow = existing if existing and existing.type == 'EMPTY' else None
+    if arrow is None:
+        arrow = bpy.data.objects.new('BDFR FRONT', None)
+        context.collection.objects.link(arrow)
+    arrow['bdfr_forward_indicator'] = True
+    arrow.name = 'BDFR FRONT (' + ('+' if forward.x + forward.y > 0 else '-') + (
+        'X' if abs(forward.x) > .5 else 'Y') + ')'
+    arrow.empty_display_type = 'SINGLE_ARROW'
+    arrow.empty_display_size = radius
+    arrow.show_name = True
+    arrow.show_in_front = True
+    arrow.hide_render = True
+    arrow.hide_select = True
+    arrow.rotation_mode = 'QUATERNION'
+    arrow.rotation_quaternion = Vector((0, 0, 1)).rotation_difference(forward)
+    arrow.location = front
+    arrow.hide_set(not context.scene.vehicle_auto_rig.show_forward_indicator)
+    return arrow
+
+
+def refresh_front_arrow(settings, context):
+    """Update the unrigged preview, or toggle the arrow on an existing rig."""
+    if context is None or context.scene is None:
+        return
+    rig = context.active_object
+    if rig and rig.type == 'ARMATURE' and rig.get('vehicle_auto_rig_version'):
+        name = rig.get('forward_indicator_name', '')
+        arrow = bpy.data.objects.get(name) if name else None
+        if arrow and arrow.get('bdfr_forward_indicator'):
+            arrow.hide_set(not settings.show_forward_indicator)
+        return
+    arrow = settings.indicator_object
+    if arrow and arrow.name in bpy.data.objects and arrow.get('bdfr_forward_indicator'):
+        if settings.has_analysis:
+            front_arrow(context, settings.bounds_min, settings.bounds_max,
+                        axes(settings)[0], arrow)
+        arrow.hide_set(not settings.show_forward_indicator)
+
+
 def name_hint(ob):
     override = ob.get('vehicle_rig_part', '')
     if override in {v[0] for v in PART_ITEMS}:
@@ -184,6 +231,11 @@ def analyze(context):
     settings.analysis_config = config_key(settings)
     settings.has_analysis = True
     settings.warning = ('Island scan skipped for: ' + ', '.join(skipped[:3])) if skipped else ''
+    previous = settings.indicator_object
+    if previous and previous.parent:
+        previous = None
+    settings.indicator_object = front_arrow(context, global_lo, global_hi,
+                                            axes(settings)[0], previous)
     return len(objects), len(regions)
 
 
@@ -365,7 +417,7 @@ def create_rig(context):
     rig = bpy.data.objects.new('Vehicle_Rig', arm_data)
     context.collection.objects.link(rig)
     rig.show_in_front = True
-    rig['vehicle_auto_rig_version'] = '0.4.0'
+    rig['vehicle_auto_rig_version'] = '0.5.0'
     rig['vehicle_type'] = settings.vehicle_type
     rig['rig_mode'] = settings.rig_mode
     rig['forward_axis'] = settings.forward_axis
@@ -489,6 +541,14 @@ def create_rig(context):
         # Meshes must also be children of the armature object so moving the
         # rig in Object Mode moves the whole vehicle, as users expect.
         parent_vehicle_to_rig(rig, objects, selected_objects, parent_changes)
+        arrow = settings.indicator_object
+        if arrow and arrow.name in bpy.data.objects and arrow.get('bdfr_forward_indicator'):
+            world = arrow.matrix_world.copy()
+            arrow.parent = rig
+            arrow.matrix_parent_inverse = rig.matrix_world.inverted()
+            arrow.matrix_world = world
+            rig['forward_indicator_name'] = arrow.name
+            settings.indicator_object = None
         for obj in objects:
             obj.select_set(True)
         rig.select_set(True)
@@ -502,6 +562,12 @@ def create_rig(context):
                     bpy.ops.object.mode_set(mode='OBJECT')
             except Exception:
                 pass
+            marker = bpy.data.objects.get(rig.get('forward_indicator_name', ''))
+            if marker and marker.parent == rig:
+                world = marker.matrix_world.copy()
+                marker.parent = None
+                marker.matrix_world = world
+                settings.indicator_object = marker
             restore_parents(parent_changes)
             for ob in objects:
                 for m in list(ob.modifiers):
@@ -509,6 +575,34 @@ def create_rig(context):
                         ob.modifiers.remove(m)
             bpy.data.objects.remove(rig, do_unlink=True)
         raise
+
+
+def ensure_rig_front_arrow(context, rig):
+    """Add a visible front direction arrow to a rig from an earlier version."""
+    name = rig.get('forward_indicator_name', '')
+    existing = bpy.data.objects.get(name) if name else None
+    if existing and existing.get('bdfr_forward_indicator'):
+        existing.hide_set(False)
+        return existing
+    meshes = [ob for ob in bpy.data.objects if ob.type == 'MESH' and
+              any(mod.type == 'ARMATURE' and mod.object == rig for mod in ob.modifiers)]
+    if not meshes:
+        raise ValueError('No meshes bound to this rig; bind the vehicle meshes first')
+    corners = [ob.matrix_world @ Vector(corner) for ob in meshes for corner in ob.bound_box]
+    lo = Vector(tuple(min(p[i] for p in corners) for i in range(3)))
+    hi = Vector(tuple(max(p[i] for p in corners) for i in range(3)))
+    settings = context.scene.vehicle_auto_rig
+    sign = 1 if rig.get('forward_sign', settings.forward_sign) == 'PLUS' else -1
+    forward = (Vector((sign, 0, 0)) if rig.get('forward_axis', settings.forward_axis) == 'X'
+               else Vector((0, sign, 0)))
+    arrow = front_arrow(context, lo, hi, forward)
+    world = arrow.matrix_world.copy()
+    arrow.parent = rig
+    arrow.matrix_parent_inverse = rig.matrix_world.inverted()
+    arrow.matrix_world = world
+    arrow.hide_set(False)
+    rig['forward_indicator_name'] = arrow.name
+    return arrow
 
 
 def repair_rig_parenting(rig):
@@ -746,8 +840,13 @@ class VAR_Settings(bpy.types.PropertyGroup):
                            name='Rig Mode', default='SIMPLE')
     bone_count: IntProperty(name='Bone Count', default=16, min=2, max=128,
                             description='Target total bones in Advanced mode; required controls are always kept')
-    forward_axis: EnumProperty(items=[('Y', 'Y', ''), ('X', 'X', '')], name='Forward axis')
-    forward_sign: EnumProperty(items=[('PLUS', '+', ''), ('MINUS', '-', '')], name='Direction')
+    forward_axis: EnumProperty(items=[('Y', 'Y', ''), ('X', 'X', '')], name='Forward axis',
+                               update=refresh_front_arrow)
+    forward_sign: EnumProperty(items=[('PLUS', '+', ''), ('MINUS', '-', '')], name='Direction',
+                               update=refresh_front_arrow)
+    show_forward_indicator: BoolProperty(name='Show FRONT Arrow', default=True,
+                                          update=refresh_front_arrow)
+    indicator_object: PointerProperty(type=bpy.types.Object)
     scan_islands: BoolProperty(name='Find disconnected parts', default=True)
     vertex_limit: IntProperty(name='Per mesh scan limit', default=300000, min=1000, max=2000000)
     parts: CollectionProperty(type=VAR_Part)
@@ -855,6 +954,27 @@ class VAR_OT_BindSelected(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class VAR_OT_FrontArrow(bpy.types.Operator):
+    bl_idname = 'vehicle_auto_rig.show_front_arrow'
+    bl_label = 'Show FRONT Arrow'
+    bl_description = 'Show the front direction above this existing vehicle rig'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        rig = context.active_object
+        return bool(rig and rig.type == 'ARMATURE' and rig.get('vehicle_auto_rig_version'))
+
+    def execute(self, context):
+        try:
+            ensure_rig_front_arrow(context, context.active_object)
+        except Exception as exc:
+            self.report({'ERROR'}, str(exc))
+            return {'CANCELLED'}
+        context.scene.vehicle_auto_rig.show_forward_indicator = True
+        return {'FINISHED'}
+
+
 class VAR_OT_TestRig(bpy.types.Operator):
     bl_idname = 'vehicle_auto_rig.test_functionality'
     bl_label = 'Create Test Animation'
@@ -931,7 +1051,7 @@ class VAR_PT_Panel(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         s = context.scene.vehicle_auto_rig
-        layout.label(text='BDFR Advanced AutoRig v0.4.0')
+        layout.label(text='BDFR Advanced AutoRig v0.5.0')
         layout.prop(s, 'vehicle_type')
         layout.prop(s, 'rig_mode', expand=True)
         if s.rig_mode == 'ADVANCED':
@@ -941,6 +1061,9 @@ class VAR_PT_Panel(bpy.types.Panel):
                 layout.label(text=f'Minimum: {required}  /  Built: {actual} bones')
         row = layout.row(align=True)
         row.prop(s, 'forward_axis'); row.prop(s, 'forward_sign')
+        direction = ('+' if s.forward_sign == 'PLUS' else '-') + s.forward_axis
+        layout.label(text=f'FRONT: {direction}')
+        layout.prop(s, 'show_forward_indicator')
         layout.prop(s, 'scan_islands')
         if s.scan_islands:
             layout.prop(s, 'vertex_limit')
@@ -976,6 +1099,11 @@ class VAR_PT_Panel(bpy.types.Panel):
         if rig and rig.type == 'ARMATURE' and rig.get('vehicle_auto_rig_version'):
             binding = layout.box()
             binding.label(text=f'Rig version: {rig.get("vehicle_auto_rig_version")}')
+            rig_dir = ('+' if rig.get('forward_sign', 'PLUS') == 'PLUS' else '-') + rig.get('forward_axis', 'Y')
+            binding.label(text=f'Rig FRONT: {rig_dir}')
+            marker = bpy.data.objects.get(rig.get('forward_indicator_name', ''))
+            if marker is None:
+                binding.operator('vehicle_auto_rig.show_front_arrow')
             bound, attached, missing = binding_status(rig)
             binding.label(text=f'Mesh binding: {attached}/{bound} follow the rig',
                           icon='CHECKMARK' if bound and bound == attached and not missing else 'ERROR')
@@ -1009,7 +1137,8 @@ class VAR_PT_Panel(bpy.types.Panel):
 
 
 CLASSES = (VAR_Part, VAR_Settings, VAR_OT_Analyze, VAR_OT_Rig, VAR_OT_Mark,
-           VAR_OT_Repair, VAR_OT_BindSelected, VAR_OT_TestRig, VAR_OT_ClearTestRig,
+           VAR_OT_Repair, VAR_OT_BindSelected, VAR_OT_FrontArrow,
+           VAR_OT_TestRig, VAR_OT_ClearTestRig,
            VAR_OT_PlayTestRig, VAR_PT_Panel)
 
 

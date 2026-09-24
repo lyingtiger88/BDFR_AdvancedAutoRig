@@ -4,13 +4,14 @@
 
 **Automatic first-pass vehicle rigging for Blender 4.2+.** Select a vehicle, inspect detected parts, and build an armature with rigid weights and simple animation controls.
 
-> **Status:** v0.4.0 preview. Detection uses object names, disconnected mesh islands, dimensions and position. It is heuristic geometry analysis, not machine-learning segmentation. Blender runtime validation on representative production files is still pending.
+> **Status:** v0.5.0 preview. Detection uses object names, disconnected mesh islands, dimensions and position. It is heuristic geometry analysis, not machine-learning segmentation. Blender runtime validation on representative production files is still pending.
 
-[راهنمای فارسی](docs/README.fa.md) · [Installable add-on ZIP](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/releases/download/v0.4.0/BDFR_AdvancedAutoRig-0.4.0.zip)
+[راهنمای فارسی](docs/README.fa.md) · [Installable add-on ZIP](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/releases/download/v0.5.0/BDFR_AdvancedAutoRig-0.5.0.zip)
 
 ## What it does
 
 - Supports **car/SUV, truck/bus, motorcycle and bicycle** layouts; set the model's front axis to `±X` or `±Y` (`Z` up).
+- **Analyze Vehicle** places a labeled FRONT arrow above the front edge in the 3D viewport. Changing the axis or sign moves and turns it. **Show FRONT Arrow** toggles visibility; the arrow is excluded from renders and follows the rig after **Build Rig**. For an older rig, select it and click **Show FRONT Arrow** in the rig panel to add the indicator.
 - Finds wheels from component names or shape and location, scans disconnected mesh islands, and merges concentric tire/rim/hub components into one wheel control.
 - Lets you review each detected component and correct its type. Separate mesh objects can also be explicitly marked as body, wheel, door, hood, trunk or ignored.
 - **Simple** creates `Root`, `Body`, wheels and steering controls. Doors and hatches stay rigid with the body. **Advanced** adds one or more poseable suspension bones per wheel, plus optional door, hood and trunk hinges. Each component receives a rigid vertex group and an Armature modifier; source mesh geometry is not split.
@@ -21,9 +22,9 @@
 
 ## Install
 
-Download [the add-on ZIP](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/releases/download/v0.4.0/BDFR_AdvancedAutoRig-0.4.0.zip). In Blender, open **Edit → Preferences → Add-ons → Install from Disk**, select the ZIP, and enable **BDFR Advanced AutoRig**. Open the 3D View sidebar with `N` and find the **Vehicle Rig** tab. Install the add-on ZIP, not GitHub's *Download ZIP* archive of the whole repository.
+Download [the add-on ZIP](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/releases/download/v0.5.0/BDFR_AdvancedAutoRig-0.5.0.zip). In Blender, open **Edit → Preferences → Add-ons → Install from Disk**, select the ZIP, and enable **BDFR Advanced AutoRig**. Open the 3D View sidebar with `N` and find the **Vehicle Rig** tab. Install the add-on ZIP, not GitHub's *Download ZIP* archive of the whole repository.
 
-**Updating from an older build:** Disable and remove the existing BDFR Advanced AutoRig entry in Preferences → Add-ons, close Blender, then restart and install the v0.4.0 add-on ZIP. The top of the Vehicle Rig panel must read **BDFR Advanced AutoRig v0.4.0**. If you still see a Wheel roll slider and no Simple/Advanced switch, Blender is still loading an older installation. Installing another ZIP over it can leave the old module active until restart.
+**Updating from an older build:** Disable and remove the existing BDFR Advanced AutoRig entry in Preferences → Add-ons, close Blender, then restart and install the v0.5.0 add-on ZIP. The top of the Vehicle Rig panel must read **BDFR Advanced AutoRig v0.5.0**. If you still see a Wheel roll slider and no Simple/Advanced switch, Blender is still loading an older installation. Installing another ZIP over it can leave the old module active until restart.
 
 ## Quick start
 
@@ -36,7 +37,7 @@ Download [the add-on ZIP](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/r
 
 ## Fix a rig built with v0.1.0
 
-Install v0.4.0 and confirm the version at the top of the panel. Select the existing `Vehicle_Rig` object and read **Mesh binding: attached/using this rig**. If meshes have Armature modifiers targeting the rig but do not follow it, return a previously moved rig to its original position first, then click **Fix Existing Binding**. If a mesh is missing the modifier, select that mesh along with the rig, make the rig active, and click **Bind Selected Meshes**; for separate objects with no existing weights, the add-on assigns the nearest matching wheel/hinge bone by name or the `Body` bone. Inspect the resulting vertex groups for unusual models. To change an older rig to Advanced, rebuild from an unrigged copy; repair does not create new bones.
+Install v0.5.0 and confirm the version at the top of the panel. Select the existing `Vehicle_Rig` object and read **Mesh binding: attached/using this rig**. If meshes have Armature modifiers targeting the rig but do not follow it, return a previously moved rig to its original position first, then click **Fix Existing Binding**. If a mesh is missing the modifier, select that mesh along with the rig, make the rig active, and click **Bind Selected Meshes**; for separate objects with no existing weights, the add-on assigns the nearest matching wheel/hinge bone by name or the `Body` bone. Inspect the resulting vertex groups for unusual models. To change an older rig to Advanced, rebuild from an unrigged copy; repair does not create new bones.
 
 ## Model preparation and limitations
 
