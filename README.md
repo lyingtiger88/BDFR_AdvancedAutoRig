@@ -4,9 +4,9 @@
 
 **Automatic first-pass vehicle rigging for Blender 4.2+.** Select a vehicle, inspect detected parts, and build an armature with rigid weights and simple animation controls.
 
-> **Status:** v0.2.0 preview. Detection uses object names, disconnected mesh islands, dimensions and position. It is heuristic geometry analysis, not machine-learning segmentation. Blender runtime validation on representative production files is still pending.
+> **Status:** v0.3.0 preview. Detection uses object names, disconnected mesh islands, dimensions and position. It is heuristic geometry analysis, not machine-learning segmentation. Blender runtime validation on representative production files is still pending.
 
-[راهنمای فارسی](docs/README.fa.md) · [Installable add-on ZIP](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/releases/download/v0.2.0/BDFR_AdvancedAutoRig-0.2.0.zip)
+[راهنمای فارسی](docs/README.fa.md) · [Installable add-on ZIP](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/releases/download/v0.3.0/BDFR_AdvancedAutoRig-0.3.0.zip)
 
 ## What it does
 
@@ -16,10 +16,11 @@
 - **Simple** creates `Root`, `Body`, wheels and steering controls. Doors and hatches stay rigid with the body. **Advanced** adds one or more poseable suspension bones per wheel, plus optional door, hood and trunk hinges. Each component receives a rigid vertex group and an Armature modifier; source mesh geometry is not split.
 - In Advanced mode, **Bone Count** sets a target total of 2–128 bones. The panel shows the minimum and actual count after analysis. Required controls are never discarded; extra bones extend the wheel suspension chains. The value is saved into each newly built rig.
 - Parents the selected vehicle hierarchy to the armature object while preserving world transforms, so moving `Vehicle_Rig` in Object Mode carries the meshes. Also exposes animatable **Steering (degrees)** and **Wheel roll (degrees)** properties.
+- The **Test Rig Functionality** section creates a 73-frame preview: detected doors, hood and trunk open and close, and the wheels rotate. The Remove button deletes the preview and restores the previous timeline and pose.
 
 ## Install
 
-Download [the add-on ZIP](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/releases/download/v0.2.0/BDFR_AdvancedAutoRig-0.2.0.zip). In Blender, open **Edit → Preferences → Add-ons → Install from Disk**, select the ZIP, and enable **BDFR Advanced AutoRig**. Open the 3D View sidebar with `N` and find the **Vehicle Rig** tab. Install the add-on ZIP, not GitHub's *Download ZIP* archive of the whole repository.
+Download [the add-on ZIP](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/releases/download/v0.3.0/BDFR_AdvancedAutoRig-0.3.0.zip). In Blender, open **Edit → Preferences → Add-ons → Install from Disk**, select the ZIP, and enable **BDFR Advanced AutoRig**. Open the 3D View sidebar with `N` and find the **Vehicle Rig** tab. Install the add-on ZIP, not GitHub's *Download ZIP* archive of the whole repository.
 
 ## Quick start
 
@@ -28,10 +29,11 @@ Download [the add-on ZIP](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/r
 3. Review the detected parts. Change the type beside any component that was misidentified. To override a separate object's classification, select it, use **Mark Selected Objects**, then analyze again.
 4. Re-select the original vehicle meshes if necessary, then click **2. Build Rig**.
 5. Select `Vehicle_Rig`. Moving it in Object Mode moves the whole vehicle. In Pose Mode, use `Root` for whole-vehicle motion and `Body` for body movement. Use the sidebar properties **Steering (degrees)** and **Wheel roll (degrees)** for animation; right-click a value and choose **Insert Keyframe**. Advanced rigs expose **Front suspension** and **Rear suspension** travel (scene units); the first bone in each wheel's suspension chain has a driver, while additional chain bones can be posed individually. These are animation controls, not simulated springs.
+6. For a preview, select the rig and click **Test Rig Functionality → Create Test Animation**. Play frames 1–73 in the Timeline. Click **Remove Test Animation** to restore the old frame range and pose. Doors, hood and trunk need an **Advanced** rig and separate, correctly detected mesh components. A Simple rig previews wheel rotation only. This preview asks for an unanimated rig so existing actions and NLA tracks stay untouched.
 
 ## Fix a rig built with v0.1.0
 
-Install v0.2.0, select the existing `Vehicle_Rig` object, and click **Repair Existing Rig Binding** in the Vehicle Rig sidebar. The repair attaches meshes already using this rig as their Armature modifier target, without rebuilding weights. Reset any rig movement that previously left the meshes behind **before** running repair; the repair preserves their current world positions. The existing vehicle hierarchy is preserved when its mesh descendants all use this rig. To switch an existing rig to Advanced, build a new rig from an unrigged model; repair does not add new bones.
+Install v0.3.0, select the existing `Vehicle_Rig` object, and click **Repair Existing Rig Binding** in the Vehicle Rig sidebar. The repair attaches meshes already using this rig as their Armature modifier target, without rebuilding weights. Reset any rig movement that previously left the meshes behind **before** running repair; the repair preserves their current world positions. The existing vehicle hierarchy is preserved when its mesh descendants all use this rig. To switch an existing rig to Advanced, build a new rig from an unrigged model; repair does not add new bones.
 
 ## Model preparation and limitations
 
@@ -39,7 +41,7 @@ Install v0.2.0, select the existing `Vehicle_Rig` object, and click **Repair Exi
 - Named doors, hood and trunk can get bones, but their hinge locations are estimates. Correct them in Armature Edit Mode if needed.
 - Very large meshes above the configured per-mesh scan limit are treated as one component and flagged. A source mesh with an existing Armature modifier or linked library data is rejected.
 - Advanced suspension is manually animated wheel travel, **not** spring physics, wheel-ground contact or collision detection. This release also does not implement Ackermann steering, vehicle physics, path driving, export baking or production-ready auto-animation. Front steering shares one angle, wheel roll shares one rotation, and suspension travel is shared per front/rear axle group.
-- A Blender 4.5 integration test checks both rig modes, object-mode rig translation, suspension motion, bone counts, pose deformation, imported hierarchy preservation and repair of an older rig. Test with a copy of a production vehicle before relying on it.
+- A Blender 4.5 integration test checks both rig modes, object-mode rig translation, suspension motion, bone counts, door/hood/trunk preview, wheel animation, pose deformation, imported hierarchy preservation and repair of an older rig. Test with a copy of a production vehicle before relying on it.
 
 ## Development
 
