@@ -127,6 +127,7 @@ def front_arrow(context, bounds_min, bounds_max, forward, existing=None):
     arrow.rotation_quaternion = Vector((0, 0, 1)).rotation_difference(forward)
     arrow.location = front
     arrow.hide_set(not context.scene.vehicle_auto_rig.show_forward_indicator)
+    context.view_layer.update()
     return arrow
 
 

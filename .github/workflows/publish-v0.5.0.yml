@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/publish-v0.5.0.yml'
+      - 'vehicle_auto_rig/__init__.py'
+      - 'tests/blender_integration.py'
+      - 'dist/BDFR_AdvancedAutoRig-0.5.0.zip'
 permissions:
   contents: write
 jobs:
