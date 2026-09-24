@@ -872,7 +872,8 @@ class VAR_OT_TestRig(bpy.types.Operator):
         except Exception as exc:
             self.report({'ERROR'}, str(exc))
             return {'CANCELLED'}
-        if context.screen and bpy.ops.screen.animation_play.poll():
+        if (context.screen and not context.screen.is_animation_playing and
+                bpy.ops.screen.animation_play.poll()):
             bpy.ops.screen.animation_play()
         self.report({'INFO'}, f'Test animation: {hinges} hinges and wheel rotation, frames 1–73')
         return {'FINISHED'}
