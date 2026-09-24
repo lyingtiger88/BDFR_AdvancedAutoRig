@@ -14,6 +14,7 @@ jobs:
         run: |
           python -m py_compile vehicle_auto_rig/__init__.py
           python tests/test_detection.py
+          python -m unittest discover -s tests -p 'test_maya_*.py'
   blender-integration:
     runs-on: ubuntu-latest
     timeout-minutes: 15
