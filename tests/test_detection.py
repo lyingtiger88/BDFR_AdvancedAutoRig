@@ -52,6 +52,11 @@ parts = [
 ]
 labels = rig.wheel_labels(parts, settings)
 assert labels == {0:'FL', 1:'FR', 2:'RL', 3:'RR', 4:'FL'}, labels
+settings.rig_mode, settings.bone_count = 'ADVANCED', 17
+_, segments, required, actual = rig.rig_bone_plan(parts, settings)
+assert required == 12 and actual == 17 and sum(segments.values()) == 9
+settings.rig_mode, settings.bone_count = 'SIMPLE', 3
+assert rig.rig_bone_plan(parts, settings)[2:] == (8, 8)
 assert rig.classify(NS(name='mesh', get=lambda key, default=None: default),
                     V((-.99, .8, 0)), V((-.61,1.6,.8)),
                     V(settings.bounds_min), V(settings.bounds_max), settings, 1)[0] == 'WHEEL'
@@ -65,4 +70,4 @@ mesh = NS(vertices=[NS(co=V((i,0,0))) for i in range(6)],
                  NS(vertices=(3,4)),NS(vertices=(4,5))])
 obj = NS(data=mesh)
 assert rig.components(obj, True, 1000) == [[0,1,2],[3,4,5]]
-print('PASS: classification, 4-wheel labels, hub merging, 2-wheel labels, mesh islands')
+print('PASS: classification, wheels, islands and simple/advanced bone budgets')

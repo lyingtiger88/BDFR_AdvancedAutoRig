@@ -51,8 +51,8 @@ def assert_move(ob, move_rig, expected):
         ob.name, tuple(actual), expected)
 
 
-def setup(parented=False):
-    print(f'Building synthetic vehicle, parented={parented}', flush=True)
+def setup(parented=False, mode='SIMPLE', bone_count=16, with_door=False):
+    print(f'Building synthetic vehicle, parented={parented}, mode={mode}', flush=True)
     for ob in list(bpy.data.objects):
         bpy.data.objects.remove(ob, do_unlink=True)
     holder = bpy.data.objects.new('Vehicle Import Root', None) if parented else None
@@ -65,25 +65,30 @@ def setup(parented=False):
         for fore in (-1, 1):
             wheels.append(box(f'Wheel_{side}_{fore}', (side * .9, fore * 1.1, .42),
                               (.22, .82, .82), holder))
+    door = box('Door_L', (-.92, .1, 1), (.1, .8, .7), holder) if with_door else None
     bpy.ops.object.select_all(action='DESELECT')
-    for item in ([holder] if holder else [body, *wheels]):
+    for item in ([holder] if holder else [body, *wheels, *([door] if door else [])]):
         item.select_set(True)
     bpy.context.view_layer.objects.active = holder or body
     s = bpy.context.scene.vehicle_auto_rig
     s.vehicle_type, s.forward_axis, s.forward_sign = 'CAR', 'Y', 'PLUS'
+    s.rig_mode, s.bone_count = mode, bone_count
     objects, parts = addon.analyze(bpy.context)
-    assert objects == 5 and parts >= 5
+    assert objects == 5 + bool(door) and parts >= objects
     print('Analysis complete', flush=True)
     rig, wheel_count, bound_count = addon.create_rig(bpy.context)
     print('Rig construction complete', flush=True)
-    assert wheel_count == 4 and bound_count == 5
-    return holder, body, wheels, rig
+    assert wheel_count == 4 and bound_count == objects
+    return holder, body, wheels, door, rig
 
 
 # Fresh unparented model: all meshes must follow the rig exactly once.
-holder, body, wheels, rig = setup(False)
+holder, body, wheels, door, rig = setup(False, with_door=True)
 print('Checking separate meshes', flush=True)
-assert all(ob.parent == rig for ob in [body, *wheels])
+assert all(ob.parent == rig for ob in [body, *wheels, door])
+assert len(rig.data.bones) == 8
+assert not any(b.name.startswith(('Suspension.', 'Door.')) for b in rig.data.bones)
+assert door.vertex_groups.get('Body')
 assert_move(body, lambda: setattr(rig.location, 'x', rig.location.x + 2), (2, 0, 0))
 assert_move(wheels[0], lambda: setattr(rig.location, 'y', rig.location.y - 1), (0, -1, 0))
 # A Root pose control must still move weighted mesh vertices in Pose Mode.
@@ -93,7 +98,7 @@ bpy.context.view_layer.update()
 assert .49 < (world_vertex(body) - before_pose).length < .51
 
 # Preserve an imported Empty hierarchy while attaching its root to the rig.
-holder, body, wheels, rig = setup(True)
+holder, body, wheels, door, rig = setup(True)
 print('Checking imported hierarchy', flush=True)
 assert holder.parent == rig and body.parent == holder
 assert all(w.parent == holder for w in wheels)
@@ -109,6 +114,28 @@ print('Checking v0.1.0 repair', flush=True)
 assert roots == 1 and count == 5
 assert holder.parent == rig and body.parent == holder
 assert_move(wheels[0], lambda: setattr(rig.location, 'x', 1), (1, 0, 0))
-print('PASS: object-mode rig motion, pose deformation, hierarchy, v0.1.0 repair', flush=True)
+
+# Advanced adds driven suspension chains and hinges. The slider sets the
+# requested total; required wheel/steer/hinge bones remain even below minimum.
+holder, body, wheels, door, rig = setup(False, mode='ADVANCED', bone_count=18,
+                                        with_door=True)
+print('Checking advanced rig budget and suspension', flush=True)
+assert len(rig.data.bones) == 18 and rig['bone_count'] == 18
+assert sum(b.name.startswith('Suspension.') for b in rig.data.bones) == 9
+assert any(b.name.startswith('Door.') for b in rig.data.bones)
+front = next(w for w in wheels if w.location.y > 0)
+rear = next(w for w in wheels if w.location.y < 0)
+front_before, rear_before, body_before = map(world_vertex, (front, rear, body))
+rig['suspension_front'] = .25
+bpy.context.view_layer.update()
+assert ((world_vertex(front) - front_before) - Vector((0, 0, .25))).length < 1e-4
+assert (world_vertex(rear) - rear_before).length < 1e-4
+assert (world_vertex(body) - body_before).length < 1e-4
+
+holder, body, wheels, door, rig = setup(False, mode='ADVANCED', bone_count=2,
+                                        with_door=True)
+print('Checking minimum bone count', flush=True)
+assert len(rig.data.bones) == 13 and rig['bone_count'] == 13
+print('PASS: simple/advanced rigs, bone budget, suspension, hierarchy and repair', flush=True)
 # Standalone bpy can spend a long time in native shutdown even after success.
 os._exit(0)

@@ -3,7 +3,7 @@
 bl_info = {
     "name": "BDFR Advanced AutoRig",
     "author": "BDFR contributors",
-    "version": (0, 1, 1),
+    "version": (0, 2, 0),
     "blender": (4, 2, 0),
     "location": "View3D > Sidebar > Vehicle Rig",
     "description": "Analyze separate objects or disconnected mesh islands and create a vehicle armature",
@@ -281,6 +281,30 @@ def wheel_labels(parts, settings):
     return names
 
 
+def rig_bone_plan(parts, settings):
+    """Count required controls and distribute extra spring bones across wheels."""
+    labels = wheel_labels(parts, settings)
+    wheels = sorted(set(labels.values()))
+    advanced = settings.rig_mode == 'ADVANCED'
+    hinges = sum(p.kind in {'DOOR', 'HOOD', 'TRUNK'} for p in parts) if advanced else 0
+    required = 2 + len(wheels) + sum(label.startswith('F') or label == 'Front'
+                                      for label in wheels) + hinges
+    spring_segments = {label: 0 for label in wheels}
+    if advanced:
+        required += len(wheels)
+        for label in wheels:
+            spring_segments[label] = 1
+        extra = max(0, settings.bone_count - required)
+        # Each added bone is part of an actual wheel suspension control chain.
+        for i in range(extra):
+            if wheels:
+                spring_segments[wheels[i % len(wheels)]] += 1
+            else:
+                break
+    return labels, spring_segments, required, required + (max(0, settings.bone_count - required)
+                                                         if advanced and wheels else 0)
+
+
 def create_rig(context):
     settings = context.scene.vehicle_auto_rig
     if not settings.has_analysis or not settings.parts:
@@ -309,7 +333,7 @@ def create_rig(context):
                 (actual_hi - Vector(p.maximum)).length > 1e-4):
             raise ValueError('A mesh moved or changed shape; Analyze again')
     parts = list(settings.parts)
-    names = wheel_labels(parts, settings)
+    names, spring_segments, required, actual = rig_bone_plan(parts, settings)
     lo, hi = Vector(settings.bounds_min), Vector(settings.bounds_max)
     center = (lo + hi) * .5
     height = max(hi.z - lo.z, .1)
@@ -319,8 +343,10 @@ def create_rig(context):
     rig = bpy.data.objects.new('Vehicle_Rig', arm_data)
     context.collection.objects.link(rig)
     rig.show_in_front = True
-    rig['vehicle_auto_rig_version'] = '0.1.1'
+    rig['vehicle_auto_rig_version'] = '0.2.0'
     rig['vehicle_type'] = settings.vehicle_type
+    rig['rig_mode'] = settings.rig_mode
+    rig['bone_count'] = actual
     parent_changes = []
     try:
         bpy.ops.object.mode_set(mode='OBJECT') if context.object and context.object.mode != 'OBJECT' else None
@@ -334,20 +360,31 @@ def create_rig(context):
         bone(eb, 'Body', center, center + Vector((0, 0, reach)), 'Root')
         assignment = {}
         created_wheels = set()
+        spring_controls = {}
         for i, part in enumerate(parts):
-            if part.kind in {'BODY', 'IGNORE'}:
-                assignment[i] = 'Body' if part.kind == 'BODY' else None
+            if part.kind in {'BODY', 'IGNORE'} or (settings.rig_mode == 'SIMPLE' and
+                                                  part.kind in {'DOOR', 'HOOD', 'TRUNK'}):
+                assignment[i] = None if part.kind == 'IGNORE' else 'Body'
                 continue
             p = Vector(part.center)
             if part.kind == 'WHEEL':
                 label = names[i]
                 wheel_name = 'Wheel.' + label
-                is_front = label.startswith('F')
+                is_front = label.startswith('F') or label == 'Front'
                 parent = 'Root'
                 if wheel_name not in created_wheels:
+                    segments = spring_segments[label]
+                    for segment in range(segments):
+                        spring_name = f'Suspension.{label}.{segment + 1:02d}'
+                        start = p + Vector((0, 0, reach * segment / segments))
+                        end = p + Vector((0, 0, reach * (segment + 1) / segments))
+                        bone(eb, spring_name, start, end, parent, False)
+                        if segment == 0:
+                            spring_controls[label] = spring_name
+                        parent = spring_name
                     if is_front:
                         steer_name = 'Steer.' + label
-                        bone(eb, steer_name, p, p + Vector((0, 0, reach)), 'Root', False)
+                        bone(eb, steer_name, p, p + Vector((0, 0, reach)), parent, False)
                         parent = steer_name
                     bone(eb, wheel_name, p, p + left * reach, parent)
                     created_wheels.add(wheel_name)
@@ -369,6 +406,12 @@ def create_rig(context):
         # world Z for steering pivots, so the same Euler channel is sufficient.
         rig['steer_degrees'] = 0.0
         rig['wheel_roll_degrees'] = 0.0
+        if spring_controls:
+            rig['suspension_front'] = 0.0
+            rig['suspension_rear'] = 0.0
+            for prop in ('suspension_front', 'suspension_rear'):
+                rig.id_properties_ui(prop).update(
+                    description='Wheel suspension travel in scene units; positive raises wheels')
         rig.id_properties_ui('steer_degrees').update(min=-55.0, max=55.0,
                                                      description='Front wheel steering in degrees')
         rig.id_properties_ui('wheel_roll_degrees').update(
@@ -392,6 +435,15 @@ def create_rig(context):
                 var.name = 'var'; var.targets[0].id_type = 'OBJECT'
                 var.targets[0].id = rig
                 var.targets[0].data_path = '["steer_degrees"]'
+        for label, name in spring_controls.items():
+            pb = rig.pose.bones[name]
+            prop = 'suspension_front' if label.startswith('F') else 'suspension_rear'
+            drv = pb.driver_add('location', 1).driver
+            drv.expression = 'var'
+            var = drv.variables.new()
+            var.name = 'var'; var.targets[0].id_type = 'OBJECT'
+            var.targets[0].id = rig
+            var.targets[0].data_path = f'["{prop}"]'
         # Rigid 1.0 weights keep separate parts solid and preserve object transforms.
         by_object = defaultdict(list)
         for i, part in enumerate(parts):
@@ -481,6 +533,11 @@ class VAR_Part(bpy.types.PropertyGroup):
 
 class VAR_Settings(bpy.types.PropertyGroup):
     vehicle_type: EnumProperty(items=TYPE_ITEMS, name='Vehicle')
+    rig_mode: EnumProperty(items=[('SIMPLE', 'Simple', 'Body, wheel and steering controls'),
+                               ('ADVANCED', 'Advanced', 'Suspension plus doors and hatches')],
+                           name='Rig Mode', default='SIMPLE')
+    bone_count: IntProperty(name='Bone Count', default=16, min=2, max=128,
+                            description='Target total bones in Advanced mode; required controls are always kept')
     forward_axis: EnumProperty(items=[('Y', 'Y', ''), ('X', 'X', '')], name='Forward axis')
     forward_sign: EnumProperty(items=[('PLUS', '+', ''), ('MINUS', '-', '')], name='Direction')
     scan_islands: BoolProperty(name='Find disconnected parts', default=True)
@@ -577,6 +634,12 @@ class VAR_PT_Panel(bpy.types.Panel):
         layout = self.layout
         s = context.scene.vehicle_auto_rig
         layout.prop(s, 'vehicle_type')
+        layout.prop(s, 'rig_mode', expand=True)
+        if s.rig_mode == 'ADVANCED':
+            layout.prop(s, 'bone_count', slider=True)
+            if s.has_analysis:
+                _, _, required, actual = rig_bone_plan(list(s.parts), s)
+                layout.label(text=f'Minimum: {required}  /  Built: {actual} bones')
         row = layout.row(align=True)
         row.prop(s, 'forward_axis'); row.prop(s, 'forward_sign')
         layout.prop(s, 'scan_islands')
@@ -608,6 +671,9 @@ class VAR_PT_Panel(bpy.types.Panel):
             box.label(text='Animate rig controls:')
             box.prop(rig, '["steer_degrees"]', text='Steering (degrees)')
             box.prop(rig, '["wheel_roll_degrees"]', text='Wheel roll (degrees)')
+            if rig.get('rig_mode') == 'ADVANCED':
+                box.prop(rig, '["suspension_front"]', text='Front suspension')
+                box.prop(rig, '["suspension_rear"]', text='Rear suspension')
             layout.operator('vehicle_auto_rig.repair_parenting', icon='CON_ARMATURE')
 
 
