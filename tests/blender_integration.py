@@ -1,7 +1,16 @@
 """Run with Blender's bpy module: python tests/blender_integration.py."""
 import sys
 import os
+import traceback
 from pathlib import Path
+
+
+def fail_fast(kind, error, stack):
+    traceback.print_exception(kind, error, stack)
+    os._exit(1)  # bpy may hang during interpreter shutdown after an exception.
+
+
+sys.excepthook = fail_fast
 
 print('Starting Blender module', flush=True)
 import bpy
@@ -128,6 +137,8 @@ rear = next(w for w in wheels if w.location.y < 0)
 front_before, rear_before, body_before = map(world_vertex, (front, rear, body))
 rig['suspension_front'] = .25
 bpy.context.view_layer.update()
+print('Suspension debug:', tuple(world_vertex(front) - front_before),
+      tuple(rig.pose.bones['Suspension.FL.01'].location), flush=True)
 assert ((world_vertex(front) - front_before) - Vector((0, 0, .25))).length < 1e-4
 assert (world_vertex(rear) - rear_before).length < 1e-4
 assert (world_vertex(body) - body_before).length < 1e-4
