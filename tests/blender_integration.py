@@ -2,7 +2,9 @@
 import sys
 from pathlib import Path
 
+print('Starting Blender module', flush=True)
 import bpy
+print('Blender module loaded', flush=True)
 from mathutils import Vector
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -49,6 +51,7 @@ def assert_move(ob, move_rig, expected):
 
 
 def setup(parented=False):
+    print(f'Building synthetic vehicle, parented={parented}', flush=True)
     for ob in list(bpy.data.objects):
         bpy.data.objects.remove(ob, do_unlink=True)
     holder = bpy.data.objects.new('Vehicle Import Root', None) if parented else None
@@ -69,13 +72,16 @@ def setup(parented=False):
     s.vehicle_type, s.forward_axis, s.forward_sign = 'CAR', 'Y', 'PLUS'
     objects, parts = addon.analyze(bpy.context)
     assert objects == 5 and parts >= 5
+    print('Analysis complete', flush=True)
     rig, wheel_count, bound_count = addon.create_rig(bpy.context)
+    print('Rig construction complete', flush=True)
     assert wheel_count == 4 and bound_count == 5
     return holder, body, wheels, rig
 
 
 # Fresh unparented model: all meshes must follow the rig exactly once.
 holder, body, wheels, rig = setup(False)
+print('Checking separate meshes', flush=True)
 assert all(ob.parent == rig for ob in [body, *wheels])
 assert_move(body, lambda: setattr(rig.location, 'x', rig.location.x + 2), (2, 0, 0))
 assert_move(wheels[0], lambda: setattr(rig.location, 'y', rig.location.y - 1), (0, -1, 0))
@@ -84,6 +90,7 @@ assert_move(body, lambda: setattr(rig.pose.bones['Root'].location, 'x', .5), (.5
 
 # Preserve an imported Empty hierarchy while attaching its root to the rig.
 holder, body, wheels, rig = setup(True)
+print('Checking imported hierarchy', flush=True)
 assert holder.parent == rig and body.parent == holder
 assert all(w.parent == holder for w in wheels)
 assert_move(body, lambda: setattr(rig.location, 'y', 1), (0, 1, 0))
@@ -97,7 +104,8 @@ transform = holder.matrix_world.copy()
 holder.parent = None
 holder.matrix_world = transform
 roots, count = addon.repair_rig_parenting(rig)
+print('Checking v0.1.0 repair', flush=True)
 assert roots == 1 and count == 5
 assert holder.parent == rig and body.parent == holder
 assert_move(wheels[0], lambda: setattr(rig.location, 'x', 1), (1, 0, 0))
-print('PASS: object-mode rig motion, pose deformation, hierarchy, v0.1.0 repair')
+print('PASS: object-mode rig motion, pose deformation, hierarchy, v0.1.0 repair', flush=True)
