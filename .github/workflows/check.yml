@@ -14,3 +14,15 @@ jobs:
         run: |
           python -m py_compile vehicle_auto_rig/__init__.py
           python tests/test_detection.py
+  blender-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Blender Python module
+        run: python -m pip install bpy==4.5.14
+      - name: Verify rig movement and repair in Blender
+        run: python tests/blender_integration.py

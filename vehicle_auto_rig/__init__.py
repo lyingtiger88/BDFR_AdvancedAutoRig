@@ -3,7 +3,7 @@
 bl_info = {
     "name": "BDFR Advanced AutoRig",
     "author": "BDFR contributors",
-    "version": (0, 1, 0),
+    "version": (0, 1, 1),
     "blender": (4, 2, 0),
     "location": "View3D > Sidebar > Vehicle Rig",
     "description": "Analyze separate objects or disconnected mesh islands and create a vehicle armature",
@@ -198,6 +198,43 @@ def bone(edit_bones, name, head, tail, parent=None, deform=True):
     return b
 
 
+def vehicle_parent_roots(meshes, selected_objects, rig):
+    """Use selected vehicle hierarchy roots rather than flattening their children."""
+    allowed = set(meshes) | set(selected_objects)
+    roots = set()
+    for ob in meshes:
+        root = ob
+        while root.parent in allowed and root.parent != rig:
+            root = root.parent
+        roots.add(root)
+    return [ob for ob in roots if not any(a != ob and ob in a.children_recursive
+                                         for a in roots)]
+
+
+def parent_vehicle_to_rig(rig, meshes, selected_objects, changes):
+    """Keep each hierarchy's world transform and attach it to the rig object."""
+    for ob in vehicle_parent_roots(meshes, selected_objects, rig):
+        if ob.parent == rig:
+            continue
+        world = ob.matrix_world.copy()
+        changes.append((ob, ob.parent, ob.parent_type, ob.parent_bone,
+                        ob.matrix_parent_inverse.copy(), world))
+        ob.parent = rig
+        ob.parent_type = 'OBJECT'
+        ob.matrix_parent_inverse = rig.matrix_world.inverted()
+        ob.matrix_world = world
+
+
+def restore_parents(changes):
+    for ob, parent, parent_type, parent_bone, parent_inverse, world in reversed(changes):
+        ob.parent = parent
+        ob.parent_type = parent_type
+        if parent_type == 'BONE':
+            ob.parent_bone = parent_bone
+        ob.matrix_parent_inverse = parent_inverse
+        ob.matrix_world = world
+
+
 def wheel_labels(parts, settings):
     forward, left = axes(settings)
     origin = (Vector(settings.bounds_min) + Vector(settings.bounds_max)) * .5
@@ -250,6 +287,7 @@ def create_rig(context):
         raise ValueError('Run Analyze first')
     if settings.analysis_config != config_key(settings):
         raise ValueError('Vehicle settings changed; Analyze again')
+    selected_objects = list(context.selected_objects)
     objects = root_objects(context)
     if sorted(o.name for o in objects) != settings.selection_names.split('|'):
         raise ValueError('Selection changed; select the original vehicle and Analyze again')
@@ -281,8 +319,9 @@ def create_rig(context):
     rig = bpy.data.objects.new('Vehicle_Rig', arm_data)
     context.collection.objects.link(rig)
     rig.show_in_front = True
-    rig['vehicle_auto_rig_version'] = '0.1.0'
+    rig['vehicle_auto_rig_version'] = '0.1.1'
     rig['vehicle_type'] = settings.vehicle_type
+    parent_changes = []
     try:
         bpy.ops.object.mode_set(mode='OBJECT') if context.object and context.object.mode != 'OBJECT' else None
         bpy.ops.object.select_all(action='DESELECT')
@@ -376,6 +415,9 @@ def create_rig(context):
             mod.object = rig
             mod.use_vertex_groups = True
             mod.use_bone_envelopes = False
+        # Meshes must also be children of the armature object so moving the
+        # rig in Object Mode moves the whole vehicle, as users expect.
+        parent_vehicle_to_rig(rig, objects, selected_objects, parent_changes)
         for obj in objects:
             obj.select_set(True)
         rig.select_set(True)
@@ -389,12 +431,40 @@ def create_rig(context):
                     bpy.ops.object.mode_set(mode='OBJECT')
             except Exception:
                 pass
+            restore_parents(parent_changes)
             for ob in objects:
                 for m in list(ob.modifiers):
                     if m.type == 'ARMATURE' and m.object == rig:
                         ob.modifiers.remove(m)
             bpy.data.objects.remove(rig, do_unlink=True)
         raise
+
+
+def repair_rig_parenting(rig):
+    """Attach meshes from a v0.1.0 rig without rebuilding their vertex groups."""
+    meshes = [ob for ob in bpy.data.objects if ob.type == 'MESH' and
+              any(mod.type == 'ARMATURE' and mod.object == rig for mod in ob.modifiers)]
+    if not meshes:
+        raise ValueError('No meshes with an Armature modifier targeting this rig')
+    bound = set(meshes)
+    # Preserve imported empty hierarchies when all mesh descendants belong to
+    # this vehicle; never pull another vehicle's meshes under this rig.
+    ancestors = set()
+    for ob in meshes:
+        ancestor = ob.parent
+        while ancestor and ancestor != rig and ancestor.type != 'ARMATURE':
+            if any(item.type == 'MESH' and item not in bound
+                   for item in ancestor.children_recursive):
+                break
+            ancestors.add(ancestor)
+            ancestor = ancestor.parent
+    changes = []
+    try:
+        parent_vehicle_to_rig(rig, meshes, ancestors, changes)
+    except Exception:
+        restore_parents(changes)
+        raise
+    return len(changes), len(meshes)
 
 
 class VAR_Part(bpy.types.PropertyGroup):
@@ -475,6 +545,27 @@ class VAR_OT_Mark(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class VAR_OT_Repair(bpy.types.Operator):
+    bl_idname = 'vehicle_auto_rig.repair_parenting'
+    bl_label = 'Repair Existing Rig Binding'
+    bl_description = 'Make meshes attached to this rig follow it in Object Mode (also repairs v0.1.0 rigs)'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        ob = context.active_object
+        return bool(ob and ob.type == 'ARMATURE' and ob.get('vehicle_auto_rig_version'))
+
+    def execute(self, context):
+        try:
+            roots, meshes = repair_rig_parenting(context.active_object)
+        except Exception as exc:
+            self.report({'ERROR'}, str(exc))
+            return {'CANCELLED'}
+        self.report({'INFO'}, f'Attached {roots} hierarchy roots ({meshes} meshes) to the rig')
+        return {'FINISHED'}
+
+
 class VAR_PT_Panel(bpy.types.Panel):
     bl_label = 'Vehicle Auto Rig'
     bl_idname = 'VAR_PT_vehicle_auto_rig'
@@ -517,9 +608,11 @@ class VAR_PT_Panel(bpy.types.Panel):
             box.label(text='Animate rig controls:')
             box.prop(rig, '["steer_degrees"]', text='Steering (degrees)')
             box.prop(rig, '["wheel_roll_degrees"]', text='Wheel roll (degrees)')
+            layout.operator('vehicle_auto_rig.repair_parenting', icon='CON_ARMATURE')
 
 
-CLASSES = (VAR_Part, VAR_Settings, VAR_OT_Analyze, VAR_OT_Rig, VAR_OT_Mark, VAR_PT_Panel)
+CLASSES = (VAR_Part, VAR_Settings, VAR_OT_Analyze, VAR_OT_Rig, VAR_OT_Mark,
+           VAR_OT_Repair, VAR_PT_Panel)
 
 
 def register():
