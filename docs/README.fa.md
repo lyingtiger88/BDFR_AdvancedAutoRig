@@ -6,7 +6,7 @@
 
 ## نصب
 
-1. فایل `BDFR_AdvancedAutoRig-0.1.1.zip` را **از حالت فشرده خارج نکنید**.
+1. [فایل نصب `BDFR_AdvancedAutoRig-0.1.1.zip`](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/releases/download/v0.1.1/BDFR_AdvancedAutoRig-0.1.1.zip) را دانلود کنید و **از حالت فشرده خارج نکنید**.
 2. در Blender به `Edit > Preferences > Add-ons > Install from Disk` بروید و ZIP را انتخاب کنید. در بعضی نسخه‌ها این گزینه زیر منوی گوشهٔ بالا سمت راست فهرست Add-ons است.
 3. افزونهٔ **BDFR Advanced AutoRig** را فعال کنید. در نمای سه‌بعدی کلید `N` را بزنید و تب **Vehicle Rig** را باز کنید.
 
