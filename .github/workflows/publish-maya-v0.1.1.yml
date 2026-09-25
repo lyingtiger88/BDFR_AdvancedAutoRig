@@ -50,6 +50,7 @@ jobs:
               --title 'BDFR Advanced AutoRig for Maya v0.1.1' \
               --notes-file docs/releases/maya-v0.1.1.md \
               --prerelease
+          fi
       - name: Publish matching Blender build in its release
         env:
           GH_TOKEN: ${{ github.token }}
