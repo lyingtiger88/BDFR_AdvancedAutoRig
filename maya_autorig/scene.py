@@ -111,8 +111,7 @@ def _part(cmds, node, up_axis, override=None):
     if cmds.ls(cmds.listHistory(node, pruneDagObjects=True) or [], type='skinCluster'):
         raise ValueError(node + ': existing skinCluster found; use an unrigged copy')
     count = int(cmds.polyEvaluate(node, vertex=True))
-    if int(cmds.polyEvaluate(node, shell=True)) != 1:
-        raise ValueError(node + ': multiple disconnected shells; separate them into mesh objects first')
+    shells = int(cmds.polyEvaluate(node, shell=True))
     bounds = tuple(float(v) for v in cmds.exactWorldBoundingBox(node))
     if len(bounds) != 6:
         raise ValueError(node + ': cannot read world-space bounds')
@@ -121,7 +120,7 @@ def _part(cmds, node, up_axis, override=None):
     invalid = set(override) - {'kind', 'axle', 'steer'}
     if invalid:
         raise ValueError('Unknown override keys: ' + ', '.join(sorted(invalid)))
-    return Part(node, bounds[:3], bounds[3:], count, **override)
+    return Part(node, bounds[:3], bounds[3:], count, shells=shells, **override)
 
 
 def analyze_selection(options=None, overrides=None, cmds=None):
@@ -148,7 +147,8 @@ def _preflight(cmds, analysis):
         if not cmds.objExists(original.node):
             raise ValueError('Mesh removed since analysis: ' + original.node)
         current = _part(cmds, original.node, analysis.options.up_axis)
-        if current.vertices != original.vertices or _distance(current.minimum, original.minimum) > 1e-5 or (
+        if current.vertices != original.vertices or current.shells != original.shells or (
+                _distance(current.minimum, original.minimum) > 1e-5) or (
                 _distance(current.maximum, original.maximum) > 1e-5):
             raise ValueError('Mesh changed since analysis; analyze again: ' + original.node)
 

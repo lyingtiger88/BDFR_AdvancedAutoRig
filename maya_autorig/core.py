@@ -64,13 +64,14 @@ class Part:
     kind: str = 'AUTO'
     axle: str = 'AUTO'
     steer: str = 'AUTO'
+    shells: int = 1
 
     def __post_init__(self):
         if not self.node or self.kind not in PARTS | {'AUTO'}:
             raise ValueError('Invalid part name or type')
         if self.axle not in {'AUTO', 'FRONT', 'REAR'} or self.steer not in {'AUTO', 'YES', 'NO'}:
             raise ValueError('Invalid wheel override')
-        if self.vertices < 1 or len(self.minimum) != 3 or len(self.maximum) != 3:
+        if self.vertices < 1 or self.shells < 1 or len(self.minimum) != 3 or len(self.maximum) != 3:
             raise ValueError('Mesh must have vertices and three-dimensional bounds')
         if not all(isfinite(v) for v in (*self.minimum, *self.maximum)) or any(
                 a > b for a, b in zip(self.minimum, self.maximum)) or all(

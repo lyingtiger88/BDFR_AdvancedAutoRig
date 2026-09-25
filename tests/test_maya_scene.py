@@ -257,8 +257,8 @@ class AdapterTests(unittest.TestCase):
 
     def test_reject_unsafe_input_without_writes(self):
         cmds = FakeCmds()
-        cmds.shells['|Vehicle|Chassis'] = 2
-        with self.assertRaisesRegex(ValueError, 'disconnected shells'):
+        cmds.shells['|Vehicle|Chassis'] = 0
+        with self.assertRaisesRegex(ValueError, 'Mesh must have vertices'):
             analyze_selection(cmds=cmds)
         self.assertFalse(cmds.joints)
         cmds.shells['|Vehicle|Chassis'] = 1
@@ -269,6 +269,31 @@ class AdapterTests(unittest.TestCase):
         self.assertFalse(cmds.joints)
         with self.assertRaisesRegex(ValueError, 'up_axis differs'):
             analyze_selection(Options(up_axis='Y', forward_axis='Z'), cmds=cmds)
+
+    def test_compound_body_and_wheel_shells_rigidly_follow_their_joints(self):
+        cmds = FakeCmds()
+        cmds.shells['|Vehicle|Chassis'] = 8
+        cmds.shells['|Vehicle|Wheel_FL'] = 2  # Tire and rim in one mesh.
+        analysis = analyze_selection(cmds=cmds)
+        parts = {part.node: part for part in analysis.parts}
+        self.assertEqual(parts['|Vehicle|Chassis'].shells, 8)
+        self.assertEqual(parts['|Vehicle|Chassis'].kind, 'BODY')
+        self.assertEqual(parts['|Vehicle|Wheel_FL'].shells, 2)
+        built = build_rig(analysis, cmds=cmds)
+        self.assertEqual(len(built.skin_clusters), 5)
+        self.assertEqual(cmds.clusters[built.skin_clusters['|Vehicle|Chassis']][0],
+                         built.joints['Body'])
+        self.assertEqual(cmds.clusters[built.skin_clusters['|Vehicle|Wheel_FL']][0],
+                         built.joints['Wheel.FL'])
+        self.assertEqual(len(cmds.skin_calls), 5)
+
+        fresh = FakeCmds()
+        fresh.shells['|Vehicle|Chassis'] = 8
+        old_analysis = analyze_selection(cmds=fresh)
+        fresh.shells['|Vehicle|Chassis'] = 7
+        with self.assertRaisesRegex(ValueError, 'Mesh changed since analysis'):
+            build_rig(old_analysis, cmds=fresh)
+        self.assertFalse(fresh.joints or fresh.clusters)
 
 
 if __name__ == '__main__':

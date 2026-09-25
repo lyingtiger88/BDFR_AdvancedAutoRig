@@ -108,11 +108,16 @@ class _RigWindow:
             self.built = None
             self.cmds.textScrollList(self.parts, edit=True, removeAll=True)
             for part in candidate.parts:
+                note = ('  (%d shells, one rigid part)' % part.shells
+                        if part.shells > 1 else '')
                 self.cmds.textScrollList(self.parts, edit=True,
-                                         append=part.kind + '  |  ' + part.node)
-            self.cmds.text(self.status, edit=True,
-                           label='Detected wheels: %s | joints: %s' % (
-                               plan.wheel_counts, len(plan.joints)))
+                                         append=part.kind + '  |  ' + part.node + note)
+            compound = sum(part.shells > 1 for part in candidate.parts)
+            message = 'Detected wheels: %s | joints: %s' % (
+                plan.wheel_counts, len(plan.joints))
+            if compound:
+                message += ' | %d multi-shell mesh(es): each follows one joint' % compound
+            self.cmds.text(self.status, edit=True, label=message)
         except (ValueError, RuntimeError) as exc:
             self.analysis = None
             self._error(exc)

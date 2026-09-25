@@ -49,7 +49,7 @@ def _creator():
 
 
 def initializePlugin(obj):
-    plugin = ommpx.MFnPlugin(obj, 'BDFR', '0.1.3', 'Any')
+    plugin = ommpx.MFnPlugin(obj, 'BDFR', '0.1.4', 'Any')
     plugin.registerCommand(_COMMAND, _creator)
     if not cmds.about(batch=True):
         try:
