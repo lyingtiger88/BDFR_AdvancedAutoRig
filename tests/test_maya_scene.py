@@ -238,6 +238,23 @@ class AdapterTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'exactly FL/FR/RL/RR'):
             drivecore_wheel_bones(built)
 
+    def test_simple_six_wheel_build_and_mismatch_before_edits(self):
+        cmds = FakeCmds()
+        cmds.meshes['|Vehicle|Wheel_ML'] = (-.95, -2.5, 0, -.65, -1.9, .7)
+        cmds.meshes['|Vehicle|Wheel_MR'] = (.65, -2.5, 0, .95, -1.9, .7)
+        cmds.shells.update({node: 1 for node in ('|Vehicle|Wheel_ML', '|Vehicle|Wheel_MR')})
+        bad = analyze_selection(Options(front_wheels=2, rear_wheels=2), cmds=cmds)
+        with self.assertRaisesRegex(ValueError, 'detected physical wheels'):
+            build_rig(bad, cmds=cmds)
+        self.assertFalse(cmds.joints or cmds.clusters)
+        good = analyze_selection(Options(front_wheels=2, rear_wheels=4), cmds=cmds)
+        built = build_rig(good, cmds=cmds)
+        self.assertEqual(built.joints['Wheel.RL'].rsplit('|', 1)[-1], 'wheel_rl')
+        self.assertEqual(built.joints['Wheel.RL2'].rsplit('|', 1)[-1], 'BDFR_Wheel_RL2')
+        self.assertEqual(len(built.skin_clusters), 7)
+        with self.assertRaisesRegex(ValueError, 'exactly FL/FR/RL/RR'):
+            drivecore_wheel_bones(built)
+
     def test_reject_unsafe_input_without_writes(self):
         cmds = FakeCmds()
         cmds.shells['|Vehicle|Chassis'] = 2

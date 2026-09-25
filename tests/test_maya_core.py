@@ -61,6 +61,45 @@ class PlannerTests(unittest.TestCase):
             wheel = joints[wheel.parent]
         self.assertTrue(wheel.name.startswith('Suspension.'))
 
+    def test_simple_front_and_rear_wheel_counts(self):
+        six_wheels = car() + [
+            part('Wheel_Extra_L', (-.9, -2.4, .42), (.22, .82, .82)),
+            part('Wheel_Extra_R', (.9, -2.4, .42), (.22, .82, .82)),
+        ]
+        plan = plan_rig(analyze(six_wheels, Options(vehicle='TRUCK', mode='SIMPLE',
+                                                     front_wheels=2, rear_wheels=4)))
+        self.assertEqual(plan.wheel_counts, {'front': 2, 'rear': 4, 'other': 0})
+        self.assertEqual(sum(j.control == 'steering' for j in plan.joints), 2)
+        self.assertEqual({j.name for j in plan.joints if j.control == 'wheel'},
+                         {'Wheel.FL', 'Wheel.FR', 'Wheel.RL', 'Wheel.RR',
+                          'Wheel.RL2', 'Wheel.RR2'})
+        # Either number can be supplied alone; the other is inferred.
+        inferred = plan_rig(analyze(six_wheels, Options(front_wheels=4)))
+        self.assertEqual(inferred.wheel_counts, {'front': 4, 'rear': 2, 'other': 0})
+        self.assertEqual(sum(j.control == 'steering' for j in inferred.joints), 4)
+
+    def test_simple_count_matches_physical_wheels_and_respects_overrides(self):
+        wheels = car()
+        wheels.append(part('Tire_FL', (-.9, 1.1, .42), (.22, .82, .82)))
+        plan = plan_rig(analyze(wheels, Options(front_wheels=2, rear_wheels=2)))
+        self.assertEqual(plan.wheel_counts, {'front': 2, 'rear': 2, 'other': 0})
+        self.assertEqual(dict(plan.bindings)['|Vehicle|Tire_FL'],
+                         dict(plan.bindings)['|Vehicle|Wheel_-1_1'])
+        with self.assertRaisesRegex(ValueError, 'detected physical wheels'):
+            plan_rig(analyze(wheels, Options(front_wheels=3, rear_wheels=2)))
+        overridden = car()
+        overridden[1] = part('Wheel_-1_-1', (-.9, -1.1, .42), (.22, .82, .82),
+                             axle='FRONT')
+        with self.assertRaisesRegex(ValueError, 'conflict with per-mesh'):
+            plan_rig(analyze(overridden, Options(front_wheels=0, rear_wheels=4)))
+
+    def test_simple_count_validation(self):
+        for kwargs in ({'front_wheels': -1}, {'rear_wheels': 33},
+                       {'front_wheels': True}, {'rear_wheels': 2.5},
+                       {'mode': 'ADVANCED', 'front_wheels': 2}):
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                Options(**kwargs)
+
     def test_plane_simple_and_advanced(self):
         simple = plan_rig(analyze(airplane(), Options(vehicle='AIRPLANE')))
         self.assertEqual(len(simple.joints), 7)

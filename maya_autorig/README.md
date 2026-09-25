@@ -46,6 +46,21 @@ analysis = analyze_selection(options, overrides={
 
 After building, animate the returned joints directly. `built.joints` maps logical names such as `Root`, `Body`, `Wheel.FL`, `Steer.FL`, `Suspension.FL.01` and `Aileron.010` to actual Maya DAG paths. Move `built.root` to translate the whole vehicle, rotate `Wheel.*` joints around their axle, rotate `Steer.*` around the scene up axis, and rotate `Propeller.*` around the forward axis. The Maya core does not yet add animation sliders or an automated test animation.
 
+## Simple-mode front and rear wheel counts
+
+Set `front_wheels` and/or `rear_wheels` on `Options` when `mode='SIMPLE'`. Each is independently optional (`None` = infer from the visible wheel meshes), and accepts 0–32 physical wheels. For example, on a truck with two front and four rear wheels:
+
+```python
+options = Options(vehicle='TRUCK', mode='SIMPLE', front_wheels=2, rear_wheels=4,
+                  up_axis=up, forward_axis='Z' if up == 'Y' else 'Y')
+analysis = analyze_selection(options)
+plan = plan_rig(analysis)
+print(plan.wheel_counts)  # {'front': 2, 'rear': 4, 'other': 0}
+built = build_rig(analysis)
+```
+
+You may specify only one number; the other is the number of remaining detected wheels. Wheels are divided by their position along the chosen forward axis; explicit per-mesh `axle='FRONT'` or `axle='REAR'` overrides take priority. Tires and rims at the same center count as **one wheel**, share one joint, and get one steering control if front. The requested counts must equal the detected physical wheels and agree with axle overrides; otherwise `plan_rig` or `build_rig` raises before changing the scene. Counts do not create geometry or joints for wheels absent from the model. Leave both unset to retain the original automatic axle classification. These two options are specific to Simple mode; Advanced keeps automatic axle classification and its independent bone count target.
+
 ## BDFR_DriveCore wheel bone names
 
 The [BDFR_DriveCore sample car](https://github.com/lyingtiger88/BDFR_DriveCore/blob/main/Source/BDFR_DriveCore/Private/AdvancedVehiclePawn.cpp) uses four Chaos `WheelSetups` in FL, FR, RL, RR order. For **CAR** and **TRUCK** rigs, Maya creates these four wheel joint names exactly as configured in DriveCore:
@@ -69,7 +84,7 @@ export_game_fbx(built, r'/absolute/path/to/drivecore_car.fbx',
                 ExportOptions(engine='UNREAL', start=1, end=120))
 ```
 
-`drivecore_wheel_bones` rejects missing/extra corner wheel joints and rigs made by the older naming scheme. For motorcycles, bicycles, airplanes and additional truck axles, the existing `BDFR_Wheel_*` names remain; configure the corresponding Chaos `WheelSetups` yourself. DriveCore still needs a Skeletal Mesh, a suitable Physics Asset, and the wheel setup/animation setup in Unreal; name matching alone does not validate driving behavior. Before import, check the final FBX orientation (+X forward, +Z up), wheel centers and centimeter scale.
+`drivecore_wheel_bones` rejects missing/extra corner wheel joints and rigs made by the older naming scheme. For motorcycles, bicycles, airplanes and additional truck axles, the existing `BDFR_Wheel_*` names remain; configure the corresponding Chaos `WheelSetups` yourself. A six-wheel Simple rig uses `wheel_fl`, `wheel_fr`, `wheel_rl`, `wheel_rr` for its first front/rear pair, and additional distinct names such as `BDFR_Wheel_RL2` and `BDFR_Wheel_RR2`. The four-wheel DriveCore example cannot consume the extras without additional `WheelSetups`. DriveCore still needs a Skeletal Mesh, a suitable Physics Asset, and the wheel setup/animation setup in Unreal; name matching alone does not validate driving behavior. Before import, check the final FBX orientation (+X forward, +Z up), wheel centers and centimeter scale.
 
 ## Bake and export for game engines
 

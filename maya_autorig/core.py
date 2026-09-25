@@ -35,6 +35,8 @@ class Options:
     forward_sign: int = 1
     bone_count: int = 16
     up_axis: str = 'Z'
+    front_wheels: int | None = None  # None: detect from geometry
+    rear_wheels: int | None = None
 
     def __post_init__(self):
         if self.vehicle not in VEHICLES or self.mode not in {'SIMPLE', 'ADVANCED'}:
@@ -44,6 +46,13 @@ class Options:
             raise ValueError('Forward axis must be horizontal in the chosen Y-up or Z-up scene')
         if not 2 <= self.bone_count <= 128:
             raise ValueError('bone_count must be between 2 and 128')
+        for label, count in (('front_wheels', self.front_wheels),
+                             ('rear_wheels', self.rear_wheels)):
+            if count is not None and (type(count) is not int or not 0 <= count <= 32):
+                raise ValueError(label + ' must be an integer between 0 and 32, or None')
+        if self.mode != 'SIMPLE' and (self.front_wheels is not None or
+                                      self.rear_wheels is not None):
+            raise ValueError('front_wheels and rear_wheels are Simple-mode options')
 
 
 @dataclass(frozen=True)
@@ -100,6 +109,19 @@ class Plan:
     bindings: tuple[tuple[str, str], ...]
     minimum_bones: int
     front_position: tuple[float, float, float]
+
+    @property
+    def wheel_counts(self):
+        """Physical wheel joints by axle; useful when reviewing Simple-mode options."""
+        counts = {'front': 0, 'rear': 0, 'other': 0}
+        for joint in self.joints:
+            if joint.control != 'wheel':
+                continue
+            label = joint.name.removeprefix('Wheel.')
+            key = ('front' if label.startswith(('F', 'Front')) else
+                   'rear' if label.startswith(('R', 'Rear')) else 'other')
+            counts[key] += 1
+        return counts
 
 
 def _axis(options):
@@ -185,12 +207,56 @@ def _wheel_labels(analysis):
             raise ValueError('Conflicting front/rear overrides on the same wheel')
         return next(iter(overrides), None)
 
+    # Optional Simple-mode counts divide detected physical wheels by
+    # longitudinal position. Explicit per-mesh axle overrides take priority.
+    requested = None
+    if options.front_wheels is not None or options.rear_wheels is not None:
+        total = len(physical)
+        front_count = (options.front_wheels if options.front_wheels is not None
+                       else total - options.rear_wheels)
+        rear_count = (options.rear_wheels if options.rear_wheels is not None
+                      else total - front_count)
+        if front_count < 0 or rear_count < 0 or front_count + rear_count != total:
+            raise ValueError('Simple wheel counts must total %d detected physical wheels; '
+                             'separate or reclassify meshes and analyze again' % total)
+        forced = [override(ids) for _, ids in physical]
+        chosen = {n for n, axle in enumerate(forced) if axle == 'FRONT'}
+        if len(chosen) > front_count or forced.count('REAR') > rear_count:
+            raise ValueError('Simple wheel counts conflict with per-mesh front/rear overrides')
+        for n, axle in enumerate(forced):
+            if axle == 'AUTO' or axle is None:
+                if len(chosen) < front_count:
+                    chosen.add(n)
+        if len(chosen) != front_count:
+            raise ValueError('Simple wheel counts conflict with per-mesh front/rear overrides')
+        requested = ['FRONT' if n in chosen else 'REAR' for n in range(total)]
+
     if options.vehicle in {'MOTORCYCLE', 'BICYCLE'}:
+        if requested is not None:
+            used = {'Front': 0, 'Rear': 0}
+            result = {}
+            for n, (_, ids) in enumerate(physical):
+                prefix = 'Front' if requested[n] == 'FRONT' else 'Rear'
+                used[prefix] += 1
+                name = prefix + (str(used[prefix]) if used[prefix] > 1 else '')
+                result.update((i, name) for i in ids)
+            return result
         return {i: ('Front' if override(ids) == 'FRONT' else
                     'Rear' if override(ids) == 'REAR' else
                     'Front' if n == 0 else 'Rear' if n == len(physical)-1
                     else 'Mid%02d' % n)
                 for n, (_, ids) in enumerate(physical) for i in ids}
+
+    if requested is not None:
+        labels, used = {}, {}
+        for n, (position, indices) in enumerate(physical):
+            prefix = 'F' if requested[n] == 'FRONT' else 'R'
+            side = 'L' if _dot(_add(position, center, -1), left) >= 0 else 'R'
+            stem = prefix + side
+            used[stem] = used.get(stem, 0) + 1
+            label = stem + (str(used[stem]) if used[stem] > 1 else '')
+            labels.update((i, label) for i in indices)
+        return labels
 
     axles = []
     tolerance = max(.04 * span, .10 * (analysis.maximum[2] - analysis.minimum[2]))
