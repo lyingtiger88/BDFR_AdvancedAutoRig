@@ -1,21 +1,33 @@
 # BDFR Advanced AutoRig — Maya core prototype
 
-This is the **script-only Maya implementation** in the same repository as the Blender add-on. It targets Maya 2024+ (Python 3.10+), and has no Maya shelf button or GUI yet. The Blender release ZIP contains only the Blender package and is not a Maya installer.
+This Maya 2024+ (Python 3.10+) module is distributed separately from the Blender add-on. The installable ZIP includes a `.mod` file, a Python plug-in entry point, and a small Maya window for analysis, rig building and FBX export. The Blender v0.6.0 ZIP does not install in Maya.
 
 The core plans joints without importing Maya, then reads and modifies Maya scenes through `maya.cmds`. It supports car/SUV, truck/bus, motorcycle, bicycle and airplane models; Simple and Advanced rigs; a visible FRONT curve; named wheels and flight surfaces; landing struts; propellers; steering and a bone count target. Meshes receive one skinCluster each with **100% weight on one assigned joint**. The source meshes stay in their existing DAG hierarchy, which avoids doubled motion when the rig root moves.
 
-## Run in Maya
+## Install the Maya ZIP
 
-Place this repository somewhere Maya's Python process can read, then run in the Python Script Editor:
+1. Download **[BDFR_AdvancedAutoRig_Maya-0.1.0.zip](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/releases/download/maya-v0.1.0/BDFR_AdvancedAutoRig_Maya-0.1.0.zip)**. Extract the **entire** archive to a temporary folder.
+2. Drag the extracted `install.py` onto a Maya viewport. The installer places `BDFR_AdvancedAutoRig.mod` and the module directory in Maya's user `modules` folder; it displays the actual location when done. If dragging is unavailable, see `README_MAYA.txt` inside the ZIP for a Script Editor command.
+3. Restart Maya, open **Windows → Settings/Preferences → Plug-in Manager**, search for `bdfr_advanced_autorig.py`, and enable **Loaded**. From the **BDFR AutoRig** menu, choose **Open Vehicle AutoRig**. The interface offers vehicle/mode/front direction, independent Simple front/rear wheel counts, Advanced joint count, Analyze, Build and Unreal/Unity FBX export.
+
+The ZIP is a Maya module, **not** a ZIP for Maya's Plug-in Manager: extract and run the included installer first. The plug-in only becomes discoverable in Plug-in Manager after the restart. `maya_autorig` can then be imported without editing `sys.path`. Select the actual model meshes or their group in the Outliner before Analyze. The strings `'/absolute/path/to/...'` in API examples elsewhere are placeholders and are not valid paths on your machine.
+
+To open the window from Maya's Python Script Editor after loading the plug-in:
 
 ```python
-import sys
-sys.path.insert(0, r'/absolute/path/to/BDFR_AdvancedAutoRig')
+from maya import cmds
+cmds.bdfrAutoRig()
+```
+
+## Use the Python API directly
+
+After installing, you can also call the underlying API from Maya's Python Script Editor. With the actual vehicle group selected, for example:
+
+```python
 from maya import cmds
 from maya_autorig import (Options, analyze_selection, plan_rig, build_rig,
                           ExportOptions, export_game_fbx, drivecore_wheel_bones)
 
-cmds.select('Vehicle', replace=True)  # or select separate mesh transforms
 up = cmds.upAxis(query=True, axis=True).upper()
 options = Options(vehicle='AIRPLANE', mode='ADVANCED', bone_count=24,
                   up_axis=up, forward_axis='Z' if up == 'Y' else 'Y')
@@ -28,11 +40,9 @@ print('Minimum / planned joints:', plan.minimum_bones, len(plan.joints))
 built = build_rig(analysis)
 print('Rig:', built.root, 'Skins:', built.skin_clusters)
 
-# After keyframing the joints, export an engine-ready skinned FBX:
-output = export_game_fbx(built, r'/absolute/path/to/vehicle.fbx',
-                         ExportOptions(engine='UNREAL', start=1, end=120,
-                                       step=1, bake=True))
-print(output.path, output.up_axis, output.forward_axis)
+# After keyframing, choose a real output filename in the UI; alternatively:
+# export_game_fbx(built, YOUR_EXISTING_DIRECTORY_AND_FBX_FILENAME,
+#                 ExportOptions(engine='UNREAL', start=1, end=120, bake=True))
 ```
 
 In a **Y-up Maya scene**, the default forward direction is **+Z**; in a **Z-up scene**, it is **+Y**. Set `forward_sign=-1` to reverse. If you omit `Options`, the adapter selects the forward axis based on the scene's up axis. To override detection, use selected meshes' **full DAG paths** as keys:
@@ -44,7 +54,7 @@ analysis = analyze_selection(options, overrides={
 })
 ```
 
-After building, animate the returned joints directly. `built.joints` maps logical names such as `Root`, `Body`, `Wheel.FL`, `Steer.FL`, `Suspension.FL.01` and `Aileron.010` to actual Maya DAG paths. Move `built.root` to translate the whole vehicle, rotate `Wheel.*` joints around their axle, rotate `Steer.*` around the scene up axis, and rotate `Propeller.*` around the forward axis. The Maya core does not yet add animation sliders or an automated test animation.
+After building, animate the returned joints directly. `built.joints` maps logical names such as `Root`, `Body`, `Wheel.FL`, `Steer.FL`, `Suspension.FL.01` and `Aileron.010` to actual Maya DAG paths. Move `built.root` to translate the whole vehicle, rotate `Wheel.*` joints around their axle, rotate `Steer.*` around the scene up axis, and rotate `Propeller.*` around the forward axis. The window does not yet add animation sliders or an automated test animation.
 
 ## Simple-mode front and rear wheel counts
 
@@ -92,7 +102,7 @@ Call `export_game_fbx(built, '/existing/directory/vehicle.fbx', ExportOptions(..
 
 With `bake=True` (default), Maya samples the rig joints and the FBX exporter bakes the specified integer frame range and step. Set `start` and `end` together; leaving both unset uses the Maya playback range. With `bake=False`, the existing keyframes are exported without sampling; driven motion that needs baking may be lost. Set `overwrite=True` to replace an existing FBX file; by default this raises `FileExistsError`. The export includes the skeleton, separate bound mesh transforms and skins; the viewport FRONT curve is excluded.
 
-Export runs in an Undo chunk, restores the Maya scene and FBX exporter preferences, and writes the FBX to a temporary file before installing the final file. Undo must be enabled. Keep the returned `built` object from `build_rig`; rigs built with earlier versions do not carry the direction metadata and should be rebuilt. This API is script-only; FBX import and deformation still need a real Maya and target engine round-trip test.
+Export runs in an Undo chunk, restores the Maya scene and FBX exporter preferences, and writes the FBX to a temporary file before installing the final file. Undo must be enabled. The window keeps the `BuiltRig` result in its current session; call `build_rig` through the API if you need it in a script. Rigs built with older versions do not carry direction metadata and should be rebuilt. FBX import and deformation still need a real Maya and target engine round-trip test.
 
 ## Model preparation and safety
 

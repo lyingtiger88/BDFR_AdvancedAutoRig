@@ -1,0 +1,37 @@
+name: Publish Maya v0.1.0 preview
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-maya-v0.1.0.yml'
+      - 'dist/BDFR_AdvancedAutoRig_Maya-0.1.0.zip'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test Maya package and regenerate exactly
+        run: |
+          python -m unittest discover -s tests -p 'test_maya_*.py'
+          python maya_packaging/build.py --output /tmp/bdfr-maya-verify.zip
+          cmp /tmp/bdfr-maya-verify.zip dist/BDFR_AdvancedAutoRig_Maya-0.1.0.zip
+      - name: Create separate Maya preview release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view maya-v0.1.0 >/dev/null 2>&1; then
+            gh release upload maya-v0.1.0 dist/BDFR_AdvancedAutoRig_Maya-0.1.0.zip --clobber
+          else
+            gh release create maya-v0.1.0 dist/BDFR_AdvancedAutoRig_Maya-0.1.0.zip \
+              --target "$GITHUB_SHA" \
+              --title 'BDFR Advanced AutoRig for Maya v0.1.0' \
+              --notes-file docs/releases/maya-v0.1.0.md \
+              --prerelease
+          fi
