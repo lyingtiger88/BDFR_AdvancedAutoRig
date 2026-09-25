@@ -1,4 +1,4 @@
-BDFR Advanced AutoRig for Maya v0.1.4 (Maya 2024+, Python 3.10+)
+BDFR Advanced AutoRig for Maya v0.1.5 (Maya 2024+, Python 3.10+)
 
 INSTALL (Windows, macOS or Linux)
 1. Extract this ZIP to any temporary folder. Do not install the Blender ZIP.
@@ -21,8 +21,13 @@ replacing the filename with the actual location of extracted install.py:
 The installer copies the module into Maya's own user application directory.
 After restarting Maya, 'import maya_autorig' works without sys.path edits.
 When updating, unload the previous plug-in first, run the new installer,
-restart Maya, then load it again in Plug-in Manager. v0.1.4 accepts a Body mesh
-with multiple disconnected shells; all shells of one mesh follow the same bone.
+restart Maya, then load it again in Plug-in Manager. v0.1.5 can export a rig
+after the tool window is reopened: select BDFR_Root in the Outliner and click
+Export. It can recover older rigs if the FRONT arrow was not edited; newly
+built rigs save their export direction on the root joint. If there are several
+rigs in the scene, select the intended BDFR_Root before exporting.
+v0.1.4 accepts a Body mesh with multiple disconnected shells; all shells of
+one mesh follow the same bone.
 Separate doors, hood and other moving pieces into their own mesh transforms if
 they must move independently. The Analyze list shows the shell count.
 If you used a sample Script Editor command with cmds.select('Vehicle'), replace

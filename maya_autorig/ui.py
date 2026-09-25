@@ -2,7 +2,7 @@
 
 from .core import Options, plan_rig
 from .export import ExportOptions, export_game_fbx
-from .scene import analyze_selection, build_rig
+from .scene import analyze_selection, build_rig, recover_built_rig
 
 
 _WINDOW = 'BDFR_AdvancedAutoRig_Window'
@@ -65,6 +65,25 @@ class _RigWindow:
         c.checkBox(self.auto_front, edit=True, changeCommand=self._refresh)
         c.checkBox(self.auto_rear, edit=True, changeCommand=self._refresh)
         self._refresh()
+        if self.analysis is not None:
+            for part in self.analysis.parts:
+                c.textScrollList(self.parts, edit=True,
+                                 append=part.kind + '  |  ' + part.node)
+        if self.built is None and any(
+                node.rsplit('|', 1)[-1].rsplit(':', 1)[-1] == 'BDFR_Root'
+                for node in (c.ls(selection=True, long=True, objectsOnly=True) or [])):
+            try:
+                self.built = recover_built_rig(cmds=c)
+            except ValueError:
+                pass  # The user may still need to select or repair their rig.
+        if self.built is not None:
+            if c.objExists(self.built.root):
+                c.text(self.status, edit=True,
+                       label='Existing rig ready for export: %d bound meshes.' % len(
+                           self.built.skin_clusters))
+            else:
+                self.built = None
+                self.analysis = None
         c.showWindow(_WINDOW)
 
     def _refresh(self, *_):
@@ -135,8 +154,10 @@ class _RigWindow:
 
     def export(self, *_):
         try:
-            if self.built is None:
-                raise ValueError('Build the rig in this window before exporting')
+            if self.built is not None and not self.cmds.objExists(self.built.root):
+                self.built = None
+            self.built = recover_built_rig(cmds=self.cmds,
+                                           root=self.built.root if self.built else None)
             filename = self.cmds.fileDialog2(fileMode=0, fileFilter='FBX (*.fbx)',
                                               dialogStyle=2, caption='Export game FBX')
             if not filename:
@@ -156,8 +177,12 @@ class _RigWindow:
 def show():
     global _active
     from maya import cmds
-    _active = _RigWindow(cmds)
-    _active.create()
+    if _active is None:
+        _active = _RigWindow(cmds)
+    if cmds.window(_WINDOW, exists=True):
+        cmds.showWindow(_WINDOW)
+    else:
+        _active.create()
 
 
 def close():

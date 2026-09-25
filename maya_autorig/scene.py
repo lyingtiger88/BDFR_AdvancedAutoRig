@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+import json
 
 from .core import Analysis, Options, Part, analyze, plan_rig, _distance
 
@@ -24,6 +25,81 @@ DRIVECORE_WHEEL_NAMES = {
     'Wheel.RL': 'wheel_rl',
     'Wheel.RR': 'wheel_rr',
 }
+_RIG_OPTIONS_ATTRIBUTE = 'BDFR_autoRigOptions'
+
+
+def _legacy_forward(cmds, arrow, up):
+    if not cmds.objExists(arrow):
+        raise ValueError('Older rig has no FRONT arrow; rebuild to recover export direction')
+    angle = float(cmds.getAttr(arrow + ('.rotateY' if up == 'Y' else '.rotateZ')))
+    by_axis = ({0: ('Z', 1), 180: ('Z', -1), 90: ('X', 1), -90: ('X', -1)}
+               if up == 'Y' else
+               {0: ('Y', 1), 180: ('Y', -1), -90: ('X', 1), 90: ('X', -1)})
+    for expected, direction in by_axis.items():
+        if abs((angle - expected + 180) % 360 - 180) < .01:
+            return direction
+    raise ValueError('FRONT arrow was rotated since rigging; cannot infer export direction')
+
+
+def recover_built_rig(cmds=None, root=None) -> BuiltRig:
+    """Reconnect an existing skinned rig for export after reopening the UI or scene."""
+    cmds = _maya(cmds)
+    joints = set(cmds.ls(type='joint', long=True) or [])
+    roots = sorted(node for node in joints if (
+        cmds.objExists(node + '.' + _RIG_OPTIONS_ATTRIBUTE) or
+        node.rsplit('|', 1)[-1].rsplit(':', 1)[-1] == 'BDFR_Root'))
+    selected = cmds.ls(selection=True, long=True, objectsOnly=True) or []
+    selected_roots = [root for root in roots if any(
+        node == root or node.startswith(root + '|') for node in selected)]
+    if root is not None:
+        if root not in roots:
+            raise ValueError('The rig from this window is no longer in this scene')
+    elif len(selected_roots) == 1:
+        root = selected_roots[0]
+    elif len(selected_roots) > 1 or len(roots) != 1:
+        raise ValueError('Select one BDFR_Root joint in the Outliner before exporting')
+    else:
+        root = roots[0]
+    members = {root, *(cmds.listRelatives(root, allDescendents=True,
+                                         type='joint', fullPath=True) or [])}
+    if len(members) < 2:
+        raise ValueError('The selected rig has no child joints to export')
+    arrow = root + '|BDFR_FRONT'
+    if cmds.objExists(root + '.' + _RIG_OPTIONS_ATTRIBUTE):
+        try:
+            saved = json.loads(cmds.getAttr(root + '.' + _RIG_OPTIONS_ATTRIBUTE))
+            if saved['schema'] != 1:
+                raise ValueError('Unsupported BDFR rig metadata version')
+            options = Options(**saved['options'])
+        except (TypeError, KeyError, json.JSONDecodeError) as exc:
+            raise ValueError('BDFR rig metadata is damaged; rebuild the rig') from exc
+    else:
+        up = _scene_up(cmds)
+        forward_axis, forward_sign = _legacy_forward(cmds, arrow, up)
+        options = Options(up_axis=up, forward_axis=forward_axis,
+                          forward_sign=forward_sign)
+    if options.up_axis != _scene_up(cmds):
+        raise ValueError('Maya up axis changed since rigging; rebuild before exporting')
+    clusters = {}
+    for shape in cmds.ls(type='mesh', long=True, noIntermediate=True) or []:
+        parents = cmds.listRelatives(shape, parent=True, fullPath=True) or []
+        if len(parents) != 1:
+            continue
+        mesh = parents[0]
+        for cluster in cmds.ls(cmds.listHistory(mesh, pruneDagObjects=True) or [],
+                               type='skinCluster') or []:
+            influences = cmds.skinCluster(cluster, query=True, influence=True) or []
+            resolved = set(cmds.ls(influences, long=True) or [])
+            if resolved and resolved <= members:
+                if mesh in clusters and clusters[mesh] != cluster:
+                    raise ValueError('Multiple BDFR skinClusters on mesh: ' + mesh)
+                clusters[mesh] = cluster
+    if not clusters:
+        raise ValueError('No meshes skinned to this BDFR rig; select its root or rebuild')
+    # The exporter reads only options from Analysis; mesh ownership comes from
+    # the validated skinCluster influences above, not from stale saved paths.
+    analysis = Analysis(options, (), (0., 0., 0.), (0., 0., 0.))
+    return BuiltRig(root, {node: node for node in members}, clusters, arrow, analysis)
 
 
 def _joint_node_name(joint, options):
@@ -241,6 +317,10 @@ def build_rig(analysis: Analysis, cmds=None):
                 raise RuntimeError('Skin bind moved mesh: ' + node)
             clusters[node] = cluster
         arrow = _front_arrow(cmds, plan, joints['Root'])
+        cmds.addAttr(joints['Root'], longName=_RIG_OPTIONS_ATTRIBUTE, dataType='string')
+        cmds.setAttr(joints['Root'] + '.' + _RIG_OPTIONS_ATTRIBUTE,
+                     json.dumps({'schema': 1, 'options': asdict(analysis.options)}),
+                     type='string')
         if original_selection:
             cmds.select(original_selection, replace=True)
         else:

@@ -2,10 +2,11 @@
 
 from .core import Analysis, Joint, Options, Part, Plan, analyze, plan_rig
 from .scene import (BuiltRig, DRIVECORE_WHEEL_NAMES, analyze_selection,
-                    build_rig, drivecore_wheel_bones)
+                    build_rig, drivecore_wheel_bones, recover_built_rig)
 from .export import ENGINE_AXES, ExportOptions, ExportResult, export_game_fbx, forward_correction
 
 __all__ = ['Analysis', 'Joint', 'Options', 'Part', 'Plan', 'BuiltRig',
            'analyze', 'plan_rig', 'analyze_selection', 'build_rig',
            'ENGINE_AXES', 'ExportOptions', 'ExportResult', 'export_game_fbx', 'forward_correction',
+           'recover_built_rig',
            'DRIVECORE_WHEEL_NAMES', 'drivecore_wheel_bones']

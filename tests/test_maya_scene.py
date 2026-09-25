@@ -1,13 +1,14 @@
 """Contract tests for the Maya adapter using a narrow fake cmds implementation."""
 
 import copy
+import json
 import sys
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from maya_autorig import (Options, analyze_selection, build_rig,
-                          drivecore_wheel_bones)
+                          drivecore_wheel_bones, recover_built_rig)
 
 
 class FakeCmds:
@@ -45,14 +46,22 @@ class FakeCmds:
 
     def objExists(self, node):
         return (node in self.meshes or node == '|Vehicle' or node in self.joints or
-                node in self.curves or node.endswith('Shape') and node[:-5] in self.meshes)
+                node in self.curves or node in self.attrs or
+                node.endswith('Shape') and node[:-5] in self.meshes or
+                node.endswith('|BDFR_FRONT') and any(
+                    curve['parent'] + '|BDFR_FRONT' == node for curve in self.curves.values()))
 
     def nodeType(self, node):
         return 'mesh' if node.endswith('Shape') else 'joint' if node in self.joints else 'transform'
 
-    def ls(self, items=None, selection=False, long=False, objectsOnly=False, type=None):
+    def ls(self, items=None, selection=False, long=False, objectsOnly=False,
+           type=None, noIntermediate=False):
         if type == 'skinCluster':
             return [item for item in (items or []) if item in self.clusters]
+        if type == 'joint':
+            return list(self.joints)
+        if type == 'mesh':
+            return [node + 'Shape' for node in self.meshes]
         if selection:
             return list(self.selected)
         if items is None:
@@ -67,6 +76,8 @@ class FakeCmds:
             return [node + 'Shape'] if node in self.meshes else []
         if allDescendents and node == '|Vehicle':
             return list(self.meshes)
+        if allDescendents and type == 'joint' and node in self.joints:
+            return [joint for joint in self.joints if joint.startswith(node + '|')]
         return []
 
     def referenceQuery(self, node, isNodeReferenced=False):
@@ -115,7 +126,9 @@ class FakeCmds:
         else:
             self.curves[node]['position'] = tuple(translation)
 
-    def skinCluster(self, joint, mesh, name=None, **flags):
+    def skinCluster(self, joint, mesh=None, name=None, **flags):
+        if flags.get('query') and flags.get('influence'):
+            return [self.clusters[joint][0]]
         if mesh == self.fail_bind:
             raise RuntimeError('Injected Maya skin failure')
         assert joint in self.joints and flags['maximumInfluences'] == 1
@@ -138,8 +151,17 @@ class FakeCmds:
         self.curves[node] = {'points': point}
         return node
 
-    def setAttr(self, attribute, value):
+    def addAttr(self, node, longName=None, dataType=None):
+        assert node in self.joints and dataType == 'string'
+        self.attrs[node + '.' + longName] = None
+
+    def setAttr(self, attribute, value, type=None):
         self.attrs[attribute] = value
+
+    def getAttr(self, attribute):
+        if attribute in self.attrs:
+            return self.attrs[attribute]
+        return self.attrs['|BDFR_FRONT' + attribute.split('|BDFR_FRONT', 1)[1]]
 
     def parent(self, node, root):
         self.curves[node]['parent'] = root
@@ -294,6 +316,39 @@ class AdapterTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Mesh changed since analysis'):
             build_rig(old_analysis, cmds=fresh)
         self.assertFalse(fresh.joints or fresh.clusters)
+
+    def test_recover_built_rig_for_export_after_window_or_scene_reopen(self):
+        cmds = FakeCmds(up='y')
+        original = build_rig(analyze_selection(Options(
+            up_axis='Y', forward_axis='X', forward_sign=-1), cmds=cmds), cmds=cmds)
+        self.assertEqual(json.loads(cmds.getAttr(original.root + '.BDFR_autoRigOptions'))[
+            'options']['forward_sign'], -1)
+        cmds.selected = [original.root]
+        recovered = recover_built_rig(cmds=cmds)
+        self.assertEqual(recovered.root, original.root)
+        self.assertEqual(recovered.analysis.options, original.analysis.options)
+        self.assertEqual(recovered.skin_clusters, original.skin_clusters)
+        self.assertEqual(len(recovered.joints), len(original.joints))
+
+        # Rigs built before metadata was introduced can recover their heading
+        # from the unmodified FRONT marker.
+        del cmds.attrs[original.root + '.BDFR_autoRigOptions']
+        legacy = recover_built_rig(cmds=cmds)
+        self.assertEqual((legacy.analysis.options.forward_axis,
+                          legacy.analysis.options.forward_sign), ('X', -1))
+
+    def test_recover_requires_unambiguous_skin_and_rig(self):
+        cmds = FakeCmds()
+        built = build_rig(analyze_selection(cmds=cmds), cmds=cmds)
+        cmds.selected = []
+        cmds.joints['|Other|BDFR_Root'] = {'parent': None, 'position': None}
+        with self.assertRaisesRegex(ValueError, 'Select one BDFR_Root'):
+            recover_built_rig(cmds=cmds)
+        recovered = recover_built_rig(cmds=cmds, root=built.root)
+        self.assertEqual(len(recovered.skin_clusters), 5)
+        cmds.clusters.clear()
+        with self.assertRaisesRegex(ValueError, 'No meshes skinned'):
+            recover_built_rig(cmds=cmds, root=built.root)
 
 
 if __name__ == '__main__':

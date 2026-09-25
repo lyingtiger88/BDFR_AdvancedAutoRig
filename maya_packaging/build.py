@@ -5,7 +5,7 @@ from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = '0.1.4'
+VERSION = '0.1.5'
 NAME = 'BDFR_AdvancedAutoRig'
 FILES = {
     'install.py': ROOT / 'maya_packaging' / 'install.py',
