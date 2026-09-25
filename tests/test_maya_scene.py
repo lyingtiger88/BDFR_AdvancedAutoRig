@@ -6,7 +6,8 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from maya_autorig import Options, analyze_selection, build_rig
+from maya_autorig import (Options, analyze_selection, build_rig,
+                          drivecore_wheel_bones)
 
 
 class FakeCmds:
@@ -30,6 +31,7 @@ class FakeCmds:
         self.clusters = {}
         self.skin_calls = []
         self.fail_bind = None
+        self.rename_wheel = False
         self.skin_string = False
         self.shells = {key: 1 for key in self.meshes}
         self.undo_enabled = True
@@ -100,6 +102,8 @@ class FakeCmds:
 
     def createNode(self, kind, name=None, parent=None):
         assert kind == 'joint'
+        if self.rename_wheel and name == 'wheel_fl':
+            name = 'wheel_fl1'
         node = (parent + '|' if parent else '|') + name
         self.joints[node] = {'parent': parent, 'position': None}
         return node
@@ -154,6 +158,13 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(len(result.skin_clusters), 5)
         self.assertEqual(len(cmds.skin_calls), 5)
         self.assertEqual(len(result.joints), 8)
+        expected = {slot: 'wheel_' + slot.lower() for slot in ('FL', 'FR', 'RL', 'RR')}
+        self.assertEqual({slot: path.rsplit('|', 1)[-1]
+                          for slot, path in drivecore_wheel_bones(result).items()}, expected)
+        for mesh, slot in (('Wheel_FL', 'FL'), ('Wheel_FR', 'FR'),
+                           ('Wheel_RL', 'RL'), ('Wheel_RR', 'RR')):
+            bound = cmds.clusters[result.skin_clusters['|Vehicle|' + mesh]][0]
+            self.assertEqual(bound, result.joints['Wheel.' + slot])
         self.assertEqual(cmds.selected, ['|Vehicle'])
         self.assertEqual(cmds.curves[result.front_arrow]['parent'], result.root)
         self.assertEqual(cmds.undo_count, 0)
@@ -167,9 +178,29 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(analysis.options.up_axis, 'Y')
         self.assertEqual(analysis.options.forward_axis, 'Z')
         result = build_rig(analysis, cmds=cmds)
+        self.assertEqual({slot: node.rsplit('|', 1)[-1]
+                          for slot, node in drivecore_wheel_bones(result).items()},
+                         {slot: 'wheel_' + slot.lower() for slot in ('FL', 'FR', 'RL', 'RR')})
         self.assertIn('|BDFR_FRONT.rotateY', cmds.attrs)
         self.assertGreater(cmds.curves[result.front_arrow]['position'][2], 0)
         self.assertGreater(cmds.curves[result.front_arrow]['position'][1], 0)
+
+    def test_advanced_keeps_steering_and_suspension_names(self):
+        cmds = FakeCmds()
+        result = build_rig(analyze_selection(Options(mode='ADVANCED', bone_count=16),
+                                             cmds=cmds), cmds=cmds)
+        self.assertEqual(result.joints['Wheel.FL'].rsplit('|', 1)[-1], 'wheel_fl')
+        self.assertEqual(result.joints['Steer.FL'].rsplit('|', 1)[-1], 'BDFR_Steer_FL')
+        self.assertEqual(result.joints['Suspension.FL.01'].rsplit('|', 1)[-1],
+                         'BDFR_Suspension_FL_01')
+
+    def test_airplane_wheels_keep_existing_names(self):
+        cmds = FakeCmds()
+        result = build_rig(analyze_selection(Options(vehicle='AIRPLANE'), cmds=cmds),
+                           cmds=cmds)
+        self.assertEqual(result.joints['Wheel.FL'].rsplit('|', 1)[-1], 'BDFR_Wheel_FL')
+        with self.assertRaisesRegex(ValueError, 'car or four-wheel truck'):
+            drivecore_wheel_bones(result)
 
     def test_reverse_and_x_front(self):
         cmds = FakeCmds()
@@ -192,6 +223,20 @@ class AdapterTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'changed since analysis'):
             build_rig(analysis, cmds=cmds)
         self.assertEqual(cmds.undo_count, 1)
+
+    def test_drivecore_rejects_missing_wheel_or_renamed_joint(self):
+        cmds = FakeCmds()
+        analysis = analyze_selection(cmds=cmds)
+        cmds.rename_wheel = True
+        with self.assertRaisesRegex(ValueError, 'Maya renamed joint wheel_fl'):
+            build_rig(analysis, cmds=cmds)
+        self.assertEqual(cmds.undo_count, 1)
+        self.assertFalse(cmds.joints or cmds.clusters)
+        cmds.rename_wheel = False
+        built = build_rig(analysis, cmds=cmds)
+        del built.joints['Wheel.RR']
+        with self.assertRaisesRegex(ValueError, 'exactly FL/FR/RL/RR'):
+            drivecore_wheel_bones(built)
 
     def test_reject_unsafe_input_without_writes(self):
         cmds = FakeCmds()

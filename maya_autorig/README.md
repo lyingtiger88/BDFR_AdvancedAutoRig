@@ -13,7 +13,7 @@ import sys
 sys.path.insert(0, r'/absolute/path/to/BDFR_AdvancedAutoRig')
 from maya import cmds
 from maya_autorig import (Options, analyze_selection, plan_rig, build_rig,
-                          ExportOptions, export_game_fbx)
+                          ExportOptions, export_game_fbx, drivecore_wheel_bones)
 
 cmds.select('Vehicle', replace=True)  # or select separate mesh transforms
 up = cmds.upAxis(query=True, axis=True).upper()
@@ -45,6 +45,31 @@ analysis = analyze_selection(options, overrides={
 ```
 
 After building, animate the returned joints directly. `built.joints` maps logical names such as `Root`, `Body`, `Wheel.FL`, `Steer.FL`, `Suspension.FL.01` and `Aileron.010` to actual Maya DAG paths. Move `built.root` to translate the whole vehicle, rotate `Wheel.*` joints around their axle, rotate `Steer.*` around the scene up axis, and rotate `Propeller.*` around the forward axis. The Maya core does not yet add animation sliders or an automated test animation.
+
+## BDFR_DriveCore wheel bone names
+
+The [BDFR_DriveCore sample car](https://github.com/lyingtiger88/BDFR_DriveCore/blob/main/Source/BDFR_DriveCore/Private/AdvancedVehiclePawn.cpp) uses four Chaos `WheelSetups` in FL, FR, RL, RR order. For **CAR** and **TRUCK** rigs, Maya creates these four wheel joint names exactly as configured in DriveCore:
+
+| AutoRig logical key | Maya / FBX wheel joint | DriveCore wheel index |
+| --- | --- | --- |
+| `Wheel.FL` | `wheel_fl` | 0: front left |
+| `Wheel.FR` | `wheel_fr` | 1: front right |
+| `Wheel.RL` | `wheel_rl` | 2: rear left |
+| `Wheel.RR` | `wheel_rr` | 3: rear right |
+
+The actual joint is at the center of its detected wheel; concentric tire/rim meshes share it. Root, steering and suspension joints retain their `BDFR_` prefix, for example `BDFR_Steer_FL` and `BDFR_Suspension_FL_01`. Existing scripts can continue using `built.joints['Wheel.FL']`. For a four-wheel car, verify the detected axle/side and exact joint names before export:
+
+```python
+options = Options(vehicle='CAR', mode='SIMPLE', up_axis=up,
+                  forward_axis='Z' if up == 'Y' else 'Y')
+analysis = analyze_selection(options)
+built = build_rig(analysis)
+print(drivecore_wheel_bones(built))  # {'FL': '|...|wheel_fl', ...}
+export_game_fbx(built, r'/absolute/path/to/drivecore_car.fbx',
+                ExportOptions(engine='UNREAL', start=1, end=120))
+```
+
+`drivecore_wheel_bones` rejects missing/extra corner wheel joints and rigs made by the older naming scheme. For motorcycles, bicycles, airplanes and additional truck axles, the existing `BDFR_Wheel_*` names remain; configure the corresponding Chaos `WheelSetups` yourself. DriveCore still needs a Skeletal Mesh, a suitable Physics Asset, and the wheel setup/animation setup in Unreal; name matching alone does not validate driving behavior. Before import, check the final FBX orientation (+X forward, +Z up), wheel centers and centimeter scale.
 
 ## Bake and export for game engines
 

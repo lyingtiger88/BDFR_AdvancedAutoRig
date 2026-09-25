@@ -16,6 +16,40 @@ class BuiltRig:
     analysis: Analysis | None = None
 
 
+# Matches AAdvancedVehiclePawn::WheelSetups in BDFR_DriveCore. Keep the
+# planner's logical names stable so existing animation scripts still work.
+DRIVECORE_WHEEL_NAMES = {
+    'Wheel.FL': 'wheel_fl',
+    'Wheel.FR': 'wheel_fr',
+    'Wheel.RL': 'wheel_rl',
+    'Wheel.RR': 'wheel_rr',
+}
+
+
+def _joint_node_name(joint, options):
+    if options.vehicle in {'CAR', 'TRUCK'} and joint.name in DRIVECORE_WHEEL_NAMES:
+        return DRIVECORE_WHEEL_NAMES[joint.name]
+    return 'BDFR_' + joint.name.replace('.', '_')
+
+
+def drivecore_wheel_bones(built: BuiltRig) -> dict[str, str]:
+    """Return FL/FR/RL/RR DAG paths, or reject an incompatible four-wheel rig."""
+    if built.analysis is None or built.analysis.options.vehicle not in {'CAR', 'TRUCK'}:
+        raise ValueError('BDFR_DriveCore requires a car or four-wheel truck rig')
+    wheel_keys = {key for key in built.joints if key.startswith('Wheel.')}
+    if wheel_keys != set(DRIVECORE_WHEEL_NAMES):
+        raise ValueError('BDFR_DriveCore default WheelSetups require exactly FL/FR/RL/RR; '
+                         'review detected axles or customize WheelSetups')
+    result = {}
+    for key, expected in DRIVECORE_WHEEL_NAMES.items():
+        node = built.joints[key]
+        if node.rsplit('|', 1)[-1] != expected:
+            raise ValueError('Wheel joint ' + key + ' must be named ' + expected +
+                             '; rebuild the rig with the current Maya core')
+        result[key.split('.')[1]] = node
+    return result
+
+
 def _maya(cmds):
     if cmds is not None:
         return cmds
@@ -127,13 +161,18 @@ def _create_joints(cmds, plan):
         for joint in pending[:]:
             if joint.parent is not None and joint.parent not in created:
                 continue
-            args = {'name': 'BDFR_' + joint.name.replace('.', '_')}
+            expected_name = _joint_node_name(joint, plan.analysis.options)
+            args = {'name': expected_name}
             if joint.parent is not None:
                 args['parent'] = created[joint.parent]
             node = cmds.createNode('joint', **args)
+            full_node = cmds.ls(node, long=True)[0]
+            if full_node.rsplit('|', 1)[-1] != expected_name:
+                raise ValueError('Maya renamed joint ' + expected_name + ' to ' + full_node +
+                                 '; resolve the naming conflict before building')
             cmds.xform(node, worldSpace=True,
                        translation=_canonical(joint.position, plan.analysis.options.up_axis))
-            created[joint.name] = cmds.ls(node, long=True)[0]
+            created[joint.name] = full_node
             pending.remove(joint)
         if len(pending) == previous:
             raise ValueError('Joint plan contains a cyclic or missing parent')
