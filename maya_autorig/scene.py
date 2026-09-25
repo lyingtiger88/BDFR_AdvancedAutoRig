@@ -13,6 +13,7 @@ class BuiltRig:
     joints: dict[str, str]
     skin_clusters: dict[str, str]
     front_arrow: str
+    analysis: Analysis | None = None
 
 
 def _maya(cmds):
@@ -205,7 +206,7 @@ def build_rig(analysis: Analysis, cmds=None):
             cmds.select(original_selection, replace=True)
         else:
             cmds.select(clear=True)
-        result = BuiltRig(joints['Root'], joints, clusters, arrow)
+        result = BuiltRig(joints['Root'], joints, clusters, arrow, analysis)
     except BaseException:
         failed = True
         raise

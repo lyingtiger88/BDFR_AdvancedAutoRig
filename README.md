@@ -8,7 +8,7 @@
 
 [راهنمای فارسی](docs/README.fa.md) · [Installable add-on ZIP](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/releases/download/v0.6.0/BDFR_AdvancedAutoRig-0.6.0.zip)
 
-**Maya core prototype:** [`maya_autorig/`](maya_autorig/README.md) contains a separate, script-only implementation. It supports Y-up and Z-up Maya scenes and rigid per-mesh skin binding. The Maya interface and Maya runtime validation are pending; the v0.6.0 ZIP above installs the Blender add-on only.
+**Maya core prototype:** [`maya_autorig/`](maya_autorig/README.md) contains a separate, script-only implementation. It supports Y-up and Z-up Maya scenes and rigid per-mesh skin binding. The Maya core also exports skinned FBX with baked animation and Unreal (+X forward, +Z up) or Unity (+Z forward, +Y up) axis presets. Maya interface and Maya runtime validation are pending; the v0.6.0 ZIP above installs the Blender add-on only.
 
 ## What it does
 

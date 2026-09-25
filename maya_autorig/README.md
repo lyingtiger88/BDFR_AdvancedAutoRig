@@ -12,7 +12,8 @@ Place this repository somewhere Maya's Python process can read, then run in the 
 import sys
 sys.path.insert(0, r'/absolute/path/to/BDFR_AdvancedAutoRig')
 from maya import cmds
-from maya_autorig import Options, analyze_selection, plan_rig, build_rig
+from maya_autorig import (Options, analyze_selection, plan_rig, build_rig,
+                          ExportOptions, export_game_fbx)
 
 cmds.select('Vehicle', replace=True)  # or select separate mesh transforms
 up = cmds.upAxis(query=True, axis=True).upper()
@@ -26,6 +27,12 @@ print('Minimum / planned joints:', plan.minimum_bones, len(plan.joints))
 # Inspect the assignments before running this scene-changing command:
 built = build_rig(analysis)
 print('Rig:', built.root, 'Skins:', built.skin_clusters)
+
+# After keyframing the joints, export an engine-ready skinned FBX:
+output = export_game_fbx(built, r'/absolute/path/to/vehicle.fbx',
+                         ExportOptions(engine='UNREAL', start=1, end=120,
+                                       step=1, bake=True))
+print(output.path, output.up_axis, output.forward_axis)
 ```
 
 In a **Y-up Maya scene**, the default forward direction is **+Z**; in a **Z-up scene**, it is **+Y**. Set `forward_sign=-1` to reverse. If you omit `Options`, the adapter selects the forward axis based on the scene's up axis. To override detection, use selected meshes' **full DAG paths** as keys:
@@ -39,12 +46,20 @@ analysis = analyze_selection(options, overrides={
 
 After building, animate the returned joints directly. `built.joints` maps logical names such as `Root`, `Body`, `Wheel.FL`, `Steer.FL`, `Suspension.FL.01` and `Aileron.010` to actual Maya DAG paths. Move `built.root` to translate the whole vehicle, rotate `Wheel.*` joints around their axle, rotate `Steer.*` around the scene up axis, and rotate `Propeller.*` around the forward axis. The Maya core does not yet add animation sliders or an automated test animation.
 
+## Bake and export for game engines
+
+Call `export_game_fbx(built, '/existing/directory/vehicle.fbx', ExportOptions(...))` after building and animating. Choose `engine='UNREAL'` for **+X forward / +Z up**, or `engine='UNITY'` for **+Z forward / +Y up**. The exporter uses the forward direction stored in `built.analysis.options` and rotates a temporary export parent to align the model. Maya FBX converts the up axis on export. Both Y-up and Z-up Maya scenes are supported, with any horizontal source forward direction in `Options`. `output.correction_degrees` reports the temporary rotation.
+
+With `bake=True` (default), Maya samples the rig joints and the FBX exporter bakes the specified integer frame range and step. Set `start` and `end` together; leaving both unset uses the Maya playback range. With `bake=False`, the existing keyframes are exported without sampling; driven motion that needs baking may be lost. Set `overwrite=True` to replace an existing FBX file; by default this raises `FileExistsError`. The export includes the skeleton, separate bound mesh transforms and skins; the viewport FRONT curve is excluded.
+
+Export runs in an Undo chunk, restores the Maya scene and FBX exporter preferences, and writes the FBX to a temporary file before installing the final file. Undo must be enabled. Keep the returned `built` object from `build_rig`; rigs built with earlier versions do not carry the direction metadata and should be rebuilt. This API is script-only; FBX import and deformation still need a real Maya and target engine round-trip test.
+
 ## Model preparation and safety
 
 - Use a separate mesh transform for each independently moving piece. Each mesh may contain only **one connected shell**; the core rejects multiple shells rather than assigning them all the same rigid weight. It cannot separate parts welded into a contiguous mesh.
 - Give parts informative names (`Wheel_FL`, `NoseWheel`, `MainGear_L`, `Propeller_1`, `Aileron_L`, `Elevator`, `Rudder`, `Flap_L`) or supply explicit overrides. Review the analysis before building. Gear struts, hinges and wheel geometry need a real model check; positions and wheel grouping are estimated from bounds.
 - Build refuses referenced or locked meshes, instanced shapes, meshes with existing skinClusters, changed meshes after analysis, scenes whose up axis changed, and sessions without Maya Undo. A failed build closes its Undo chunk and calls Undo to restore the scene. Keep a saved copy of your scene when testing production assets.
-- This initial core handles rigid per-object weights. It does not yet support multiple moving parts within a single mesh, animated previews, export baking, complex multilink landing gear, or flight and suspension physics.
+- This core handles rigid per-object weights. It does not yet support multiple moving parts within a single mesh, animated previews, complex multilink landing gear, or flight and suspension physics.
 
 ## Tests
 
