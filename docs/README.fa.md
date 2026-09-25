@@ -4,7 +4,7 @@
 
 افزونه‌ای برای ساخت ریگ مکانیکی اولیهٔ خودرو، SUV، کامیون/اتوبوس، موتورسیکلت، دوچرخه و هواپیما در Blender 4.2 و جدیدتر.
 
-**نسخهٔ مایا v0.1.2:** [ZIP نصب مایا](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/releases/download/maya-v0.1.2/BDFR_AdvancedAutoRig_Maya-0.1.2.zip) را از نسخهٔ بلندر جدا دانلود کنید؛ ZIP را کامل استخراج کنید، فایل `install.py` را روی نمای مایا بکشید، مایا را دوباره اجرا کنید و در Plug-in Manager افزونهٔ `bdfr_advanced_autorig.py` را بارگذاری کنید. [راهنمای نصب و کار با مایا](../maya_autorig/README.md) و پنجرهٔ Analyze / Build / FBX در دسترس‌اند. گزینه‌های تعداد چرخ جلو و عقب حالت Simple هم در پنجره قرار دارند. این نسخه یک دکمهٔ آیکن‌دار در Shelf بخش **Rigging** مایا دارد و اصلاح خطای `OpenMaya.MObject` نسخهٔ قبل را حفظ می‌کند؛ تست عملی در نصب واقعی مایا هنوز انجام نشده است. ZIP بلندر v0.6.0 مخصوص مایا نیست.
+**نسخهٔ مایا v0.1.3:** [ZIP نصب مایا](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/releases/download/maya-v0.1.3/BDFR_AdvancedAutoRig_Maya-0.1.3.zip) را از نسخهٔ بلندر جدا دانلود کنید؛ ZIP را کامل استخراج کنید، فایل `install.py` را روی نمای مایا بکشید، مایا را دوباره اجرا کنید و در Plug-in Manager افزونهٔ `bdfr_advanced_autorig.py` را بارگذاری کنید. [راهنمای نصب و کار با مایا](../maya_autorig/README.md) و پنجرهٔ Analyze / Build / FBX در دسترس‌اند. گزینه‌های تعداد چرخ جلو و عقب حالت Simple هم در پنجره قرار دارند. نسخهٔ 0.1.3 خطای `__file__ is not defined` در بارگذاری پلاگین Maya 2027 را رفع می‌کند و دکمهٔ آیکن‌دار Shelf بخش **Rigging** را حفظ می‌کند. نام `Vehicle` در دستورهای نمونه صرفاً مثال است؛ گروه واقعی مدل را در Outliner انتخاب کنید؛ تست عملی در نصب واقعی مایا هنوز انجام نشده است. ZIP بلندر v0.6.0 مخصوص مایا نیست.
 
 ![آیکن ابزار در Shelf مایا](../maya_packaging/icons/BDFR_AutoRig_128.png)
 

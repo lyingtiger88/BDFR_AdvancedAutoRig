@@ -8,10 +8,20 @@ _COMMAND = 'bdfrAutoRig'
 _MENU = 'BDFR_AutoRig_Menu'
 _SHELF = 'Rigging'
 _SHELF_BUTTON = 'BDFR_AutoRig_ShelfButton'
-_ICON_FILE = Path(__file__).resolve().parents[1] / 'icons' / 'BDFR_AutoRig_64.png'
-if not _ICON_FILE.is_file():  # Running directly from the source tree.
-    _ICON_FILE = Path(__file__).resolve().parent / 'icons' / 'BDFR_AutoRig_64.png'
-_ICON = str(_ICON_FILE)
+_MODULE = 'BDFR_AdvancedAutoRig'
+
+
+def _icon_path():
+    # Maya may execute plug-ins without setting __file__. Resolve the module
+    # through Maya instead, after the plug-in has been registered.
+    try:
+        module_path = cmds.moduleInfo(moduleName=_MODULE, path=True)
+    except (RuntimeError, ValueError):
+        return None
+    if isinstance(module_path, (list, tuple)):
+        module_path = module_path[0] if module_path else None
+    icon = Path(module_path) / 'icons' / 'BDFR_AutoRig_64.png' if module_path else None
+    return str(icon) if icon and icon.is_file() else None
 
 
 def _add_shelf_button():
@@ -19,9 +29,13 @@ def _add_shelf_button():
         return
     if cmds.shelfButton(_SHELF_BUTTON, exists=True):
         cmds.deleteUI(_SHELF_BUTTON, control=True)
-    cmds.shelfButton(_SHELF_BUTTON, parent=_SHELF, image1=_ICON,
-                     label='BDFR AutoRig', annotation='Open BDFR Advanced AutoRig',
-                     sourceType='python', command='from maya import cmds; cmds.bdfrAutoRig()')
+    button = dict(parent=_SHELF, label='BDFR AutoRig',
+                  annotation='Open BDFR Advanced AutoRig',
+                  sourceType='python', command='from maya import cmds; cmds.bdfrAutoRig()')
+    icon = _icon_path()
+    if icon:
+        button['image1'] = icon
+    cmds.shelfButton(_SHELF_BUTTON, **button)
 
 
 class ShowAutoRig(ommpx.MPxCommand):
@@ -35,15 +49,19 @@ def _creator():
 
 
 def initializePlugin(obj):
-    plugin = ommpx.MFnPlugin(obj, 'BDFR', '0.1.2', 'Any')
+    plugin = ommpx.MFnPlugin(obj, 'BDFR', '0.1.3', 'Any')
     plugin.registerCommand(_COMMAND, _creator)
     if not cmds.about(batch=True):
         try:
             if cmds.menu(_MENU, exists=True):
                 cmds.deleteUI(_MENU)
             cmds.menu(_MENU, label='BDFR AutoRig', parent='MayaWindow', tearOff=False)
-            cmds.menuItem(label='Open Vehicle AutoRig', parent=_MENU,
-                          image=_ICON, command=lambda *_: cmds.bdfrAutoRig())
+            item = dict(label='Open Vehicle AutoRig', parent=_MENU,
+                        command=lambda *_: cmds.bdfrAutoRig())
+            icon = _icon_path()
+            if icon:
+                item['image'] = icon
+            cmds.menuItem(**item)
             _add_shelf_button()
         except BaseException:
             if cmds.shelfButton(_SHELF_BUTTON, exists=True):

@@ -32,10 +32,16 @@ class FakeCmds:
 class MayaPackageTests(unittest.TestCase):
     def test_rigging_shelf_button_uses_packaged_icon_and_opens_tool(self):
         class InteractiveCmds:
-            def __init__(self):
+            def __init__(self, module_path):
                 self.controls = {}
                 self.icon = None
                 self.calls = 0
+                self.module_path = module_path
+
+            def moduleInfo(self, moduleName, path=False):
+                assert moduleName == 'BDFR_AdvancedAutoRig'
+                assert path
+                return str(self.module_path)
 
             def about(self, batch=False):
                 return False
@@ -65,7 +71,6 @@ class MayaPackageTests(unittest.TestCase):
             def bdfrAutoRig(self):
                 self.calls += 1
 
-        cmds = InteractiveCmds()
         ommpx = types.ModuleType('maya.OpenMayaMPx')
         ommpx.MPxCommand = type('MPxCommand', (), {})
         ommpx.asMPxPtr = lambda command: command
@@ -77,32 +82,40 @@ class MayaPackageTests(unittest.TestCase):
             def deregisterCommand(self, *args):
                 pass
         ommpx.MFnPlugin = MFnPlugin
-        maya = types.ModuleType('maya')
-        maya.__path__ = []
-        maya.OpenMayaMPx = ommpx
-        maya.cmds = cmds
-        ui = types.ModuleType('maya_autorig.ui')
-        ui.close = lambda: None
-        source = Path(__file__).resolve().parents[1] / 'maya_packaging' / 'bdfr_advanced_autorig.py'
-        spec = importlib.util.spec_from_file_location('bdfr_advanced_autorig_shelf_test', source)
-        plugin = importlib.util.module_from_spec(spec)
-        with patch.dict(sys.modules, {'maya': maya, 'maya.OpenMayaMPx': ommpx,
-                                      'maya_autorig.ui': ui}):
-            spec.loader.exec_module(plugin)
-            plugin.initializePlugin(object())
-            button = cmds.controls['BDFR_AutoRig_ShelfButton']
-            self.assertEqual(button['parent'], 'Rigging')
-            self.assertEqual(button['sourceType'], 'python')
-            self.assertTrue(Path(button['image1']).is_file())
-            self.assertTrue(cmds.icon.endswith('BDFR_AutoRig_64.png'))
-            plugin._add_shelf_button()
-            self.assertEqual(len([name for name in cmds.controls if 'ShelfButton' in name]), 1)
-            exec(button['command'], {})
-            self.assertEqual(cmds.calls, 1)
-            cmds.open_menu()
-            self.assertEqual(cmds.calls, 2)
-            plugin.uninitializePlugin(object())
-            self.assertNotIn('BDFR_AutoRig_ShelfButton', cmds.controls)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with ZipFile(build_zip(root / 'maya.zip')) as archive:
+                archive.extractall(root)
+            module_path = root / 'BDFR_AdvancedAutoRig'
+            cmds = InteractiveCmds(module_path)
+            maya = types.ModuleType('maya')
+            maya.__path__ = []
+            maya.OpenMayaMPx = ommpx
+            maya.cmds = cmds
+            ui = types.ModuleType('maya_autorig.ui')
+            ui.close = lambda: None
+            source = module_path / 'plug-ins' / 'bdfr_advanced_autorig.py'
+            # Maya's plug-in loader can execute source with no __file__.
+            plugin = {'__name__': 'bdfr_advanced_autorig'}
+            with patch.dict(sys.modules, {'maya': maya, 'maya.OpenMayaMPx': ommpx,
+                                          'maya_autorig.ui': ui}):
+                exec(compile(source.read_bytes(), str(source), 'exec'), plugin)
+                self.assertNotIn('__file__', plugin)
+                plugin['initializePlugin'](object())
+                button = cmds.controls['BDFR_AutoRig_ShelfButton']
+                self.assertEqual(button['parent'], 'Rigging')
+                self.assertEqual(button['sourceType'], 'python')
+                self.assertEqual(Path(button['image1']), module_path / 'icons' / 'BDFR_AutoRig_64.png')
+                self.assertTrue(Path(button['image1']).is_file())
+                self.assertEqual(cmds.icon, button['image1'])
+                plugin['_add_shelf_button']()
+                self.assertEqual(len([name for name in cmds.controls if 'ShelfButton' in name]), 1)
+                exec(button['command'], {})
+                self.assertEqual(cmds.calls, 1)
+                cmds.open_menu()
+                self.assertEqual(cmds.calls, 2)
+                plugin['uninitializePlugin'](object())
+                self.assertNotIn('BDFR_AutoRig_ShelfButton', cmds.controls)
 
     def test_plugin_registers_with_legacy_mobject_passed_by_maya(self):
         # Maya's initializePlugin argument is an API 1.0 MObject. API 2.0's
