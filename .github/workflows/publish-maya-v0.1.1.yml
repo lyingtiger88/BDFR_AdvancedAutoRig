@@ -5,13 +5,14 @@ on:
     paths:
       - '.github/workflows/publish-maya-v0.1.1.yml'
       - 'dist/BDFR_AdvancedAutoRig_Maya-0.1.1.zip'
+      - 'blender_packaging/build.py'
   workflow_dispatch:
 permissions:
   contents: write
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -22,6 +23,21 @@ jobs:
           python -m unittest discover -s tests -p 'test_maya_*.py'
           python maya_packaging/build.py --output /tmp/bdfr-maya-verify.zip
           cmp /tmp/bdfr-maya-verify.zip dist/BDFR_AdvancedAutoRig_Maya-0.1.1.zip
+      - name: Build and validate Blender ZIP
+        run: |
+          python blender_packaging/build.py --output /tmp/BDFR_AdvancedAutoRig-0.6.0.zip
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          with ZipFile('/tmp/BDFR_AdvancedAutoRig-0.6.0.zip') as archive:
+              assert archive.testzip() is None
+              assert archive.namelist() == ['vehicle_auto_rig/__init__.py']
+              assert archive.read('vehicle_auto_rig/__init__.py') == Path('vehicle_auto_rig/__init__.py').read_bytes()
+          PY
+      - name: Install Blender Python module
+        run: python -m pip install bpy==4.5.14
+      - name: Verify Blender mesh binding and rig preview
+        run: timeout 120s python -u tests/blender_integration.py
       - name: Create separate Maya preview release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -33,5 +49,17 @@ jobs:
               --target "$GITHUB_SHA" \
               --title 'BDFR Advanced AutoRig for Maya v0.1.1' \
               --notes-file docs/releases/maya-v0.1.1.md \
+              --prerelease
+      - name: Publish matching Blender build in its release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v0.6.0 >/dev/null 2>&1; then
+            gh release upload v0.6.0 /tmp/BDFR_AdvancedAutoRig-0.6.0.zip --clobber
+          else
+            gh release create v0.6.0 /tmp/BDFR_AdvancedAutoRig-0.6.0.zip \
+              --target "$GITHUB_SHA" \
+              --title 'BDFR Advanced AutoRig v0.6.0' \
+              --notes-file docs/releases/v0.6.0.md \
               --prerelease
           fi

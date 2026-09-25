@@ -5,3 +5,5 @@ Fixes the `TypeError: argument 1 must be OpenMaya.MObject, not MObject` seen whe
 To upgrade: unload `bdfr_advanced_autorig.py` in Plug-in Manager, extract this ZIP in full, drag `install.py` into a Maya viewport, restart Maya, and enable the plug-in again. The installer replaces the existing module. Choose **BDFR AutoRig → Open Vehicle AutoRig**.
 
 Maya 2024+ is targeted. Automated package, core and adapter tests pass. Loading and deformation in an actual Maya 2027 session still need validation.
+
+The matching Blender package is rebuilt and uploaded separately to the [Blender v0.6.0 release](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/releases/tag/v0.6.0) during this publish workflow. The Blender add-on source remains v0.6.0.
