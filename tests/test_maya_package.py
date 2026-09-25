@@ -1,11 +1,14 @@
 """Verify the downloadable Maya ZIP installs and resolves the Python core."""
 
 import os
+import importlib.util
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
+from unittest.mock import patch
 from zipfile import ZipFile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -27,6 +30,48 @@ class FakeCmds:
 
 
 class MayaPackageTests(unittest.TestCase):
+    def test_plugin_registers_with_legacy_mobject_passed_by_maya(self):
+        # Maya's initializePlugin argument is an API 1.0 MObject. API 2.0's
+        # MFnPlugin rejects it with "argument 1 must be OpenMaya.MObject".
+        class LegacyMObject:
+            pass
+
+        registrations = []
+
+        class MFnPlugin:
+            def __init__(self, obj, *details):
+                if not isinstance(obj, LegacyMObject):
+                    raise TypeError('argument 1 must be OpenMaya.MObject, not MObject')
+                self.obj = obj
+                if details:
+                    self.details = details
+
+            def registerCommand(self, name, creator):
+                registrations.append((name, creator()))
+
+            def deregisterCommand(self, name):
+                registrations.append(('removed', name))
+
+        ommpx = types.ModuleType('maya.OpenMayaMPx')
+        ommpx.MPxCommand = type('MPxCommand', (), {})
+        ommpx.MFnPlugin = MFnPlugin
+        ommpx.asMPxPtr = lambda command: ('Maya command pointer', command)
+        maya = types.ModuleType('maya')
+        maya.__path__ = []
+        maya.OpenMayaMPx = ommpx
+        maya.cmds = FakeCmds(None)
+        source = Path(__file__).resolve().parents[1] / 'maya_packaging' / 'bdfr_advanced_autorig.py'
+        spec = importlib.util.spec_from_file_location('bdfr_advanced_autorig_test', source)
+        plugin = importlib.util.module_from_spec(spec)
+        with patch.dict(sys.modules, {'maya': maya, 'maya.OpenMayaMPx': ommpx}):
+            spec.loader.exec_module(plugin)
+            obj = LegacyMObject()
+            plugin.initializePlugin(obj)
+            self.assertEqual(registrations[0][0], 'bdfrAutoRig')
+            self.assertIsInstance(registrations[0][1][1], plugin.ShowAutoRig)
+            plugin.uninitializePlugin(obj)
+        self.assertEqual(registrations[-1], ('removed', 'bdfrAutoRig'))
+
     def test_zip_installs_and_imports_without_repo_path(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

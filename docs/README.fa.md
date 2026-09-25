@@ -4,7 +4,7 @@
 
 افزونه‌ای برای ساخت ریگ مکانیکی اولیهٔ خودرو، SUV، کامیون/اتوبوس، موتورسیکلت، دوچرخه و هواپیما در Blender 4.2 و جدیدتر.
 
-**نسخهٔ مایا v0.1.0:** [ZIP نصب مایا](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/releases/download/maya-v0.1.0/BDFR_AdvancedAutoRig_Maya-0.1.0.zip) را از نسخهٔ بلندر جدا دانلود کنید؛ ZIP را کامل استخراج کنید، فایل `install.py` را روی نمای مایا بکشید، مایا را دوباره اجرا کنید و در Plug-in Manager افزونهٔ `bdfr_advanced_autorig.py` را بارگذاری کنید. [راهنمای نصب و کار با مایا](../maya_autorig/README.md) و پنجرهٔ Analyze / Build / FBX در دسترس‌اند. گزینه‌های تعداد چرخ جلو و عقب حالت Simple هم در پنجره قرار دارند. تست عملی در نصب واقعی مایا هنوز انجام نشده است. ZIP بلندر v0.6.0 مخصوص مایا نیست.
+**نسخهٔ مایا v0.1.1:** [ZIP نصب مایا](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/releases/download/maya-v0.1.1/BDFR_AdvancedAutoRig_Maya-0.1.1.zip) را از نسخهٔ بلندر جدا دانلود کنید؛ ZIP را کامل استخراج کنید، فایل `install.py` را روی نمای مایا بکشید، مایا را دوباره اجرا کنید و در Plug-in Manager افزونهٔ `bdfr_advanced_autorig.py` را بارگذاری کنید. [راهنمای نصب و کار با مایا](../maya_autorig/README.md) و پنجرهٔ Analyze / Build / FBX در دسترس‌اند. گزینه‌های تعداد چرخ جلو و عقب حالت Simple هم در پنجره قرار دارند. این نسخه خطای `OpenMaya.MObject` هنگام بارگذاری پلاگین در Maya 2027 را رفع می‌کند؛ تست عملی در نصب واقعی مایا هنوز انجام نشده است. ZIP بلندر v0.6.0 مخصوص مایا نیست.
 
 ## نصب
 

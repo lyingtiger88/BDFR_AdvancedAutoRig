@@ -1,4 +1,4 @@
-BDFR Advanced AutoRig for Maya 2024+ (Python 3.10+)
+BDFR Advanced AutoRig for Maya v0.1.1 (Maya 2024+, Python 3.10+)
 
 INSTALL (Windows, macOS or Linux)
 1. Extract this ZIP to any temporary folder. Do not install the Blender ZIP.
@@ -18,6 +18,9 @@ replacing the filename with the actual location of extracted install.py:
 
 The installer copies the module into Maya's own user application directory.
 After restarting Maya, 'import maya_autorig' works without sys.path edits.
+When updating v0.1.0, unload the previous plug-in first, run the new installer,
+restart Maya, then load it again in Plug-in Manager. This release fixes the
+MObject type error during plug-in initialization.
 The input model must have separate mesh objects for movable parts. Save the
 scene, select its group, Analyze, review the detected parts, then Build Rig.
 Simple mode has independent front/rear wheel counts (Auto by default).
