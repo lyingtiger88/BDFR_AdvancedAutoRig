@@ -6,13 +6,13 @@ The core plans joints without importing Maya, then reads and modifies Maya scene
 
 ## Install the Maya ZIP
 
-1. Download **[BDFR_AdvancedAutoRig_Maya-0.1.1.zip](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/releases/download/maya-v0.1.1/BDFR_AdvancedAutoRig_Maya-0.1.1.zip)**. Extract the **entire** archive to a temporary folder.
+1. Download **[BDFR_AdvancedAutoRig_Maya-0.1.2.zip](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/releases/download/maya-v0.1.2/BDFR_AdvancedAutoRig_Maya-0.1.2.zip)**. Extract the **entire** archive to a temporary folder.
 2. Drag the extracted `install.py` onto a Maya viewport. The installer places `BDFR_AdvancedAutoRig.mod` and the module directory in Maya's user `modules` folder; it displays the actual location when done. If dragging is unavailable, see `README_MAYA.txt` inside the ZIP for a Script Editor command.
-3. Restart Maya, open **Windows → Settings/Preferences → Plug-in Manager**, search for `bdfr_advanced_autorig.py`, and enable **Loaded**. From the **BDFR AutoRig** menu, choose **Open Vehicle AutoRig**. The interface offers vehicle/mode/front direction, independent Simple front/rear wheel counts, Advanced joint count, Analyze, Build and Unreal/Unity FBX export.
+3. Restart Maya, open **Windows → Settings/Preferences → Plug-in Manager**, search for `bdfr_advanced_autorig.py`, and enable **Loaded**. Click the turquoise steering wheel icon on Maya's **Rigging** shelf or choose **BDFR AutoRig → Open Vehicle AutoRig** from the top menu. The interface offers vehicle/mode/front direction, independent Simple front/rear wheel counts, Advanced joint count, Analyze, Build and Unreal/Unity FBX export.
 
 The ZIP is a Maya module, **not** a ZIP for Maya's Plug-in Manager: extract and run the included installer first. The plug-in only becomes discoverable in Plug-in Manager after the restart. `maya_autorig` can then be imported without editing `sys.path`. Select the actual model meshes or their group in the Outliner before Analyze. The strings `'/absolute/path/to/...'` in API examples elsewhere are placeholders and are not valid paths on your machine.
 
-**Upgrading from v0.1.0:** unload `bdfr_advanced_autorig.py`, run the installer from the v0.1.1 ZIP, restart Maya, then enable it in Plug-in Manager. v0.1.0 raised `argument 1 must be OpenMaya.MObject, not MObject` during plug-in loading; v0.1.1 uses the matching Maya plug-in API and pointer factory. Automated tests cover this initialization with Maya's legacy `MObject`; interactive Maya 2027 validation is still pending.
+**Upgrading:** unload `bdfr_advanced_autorig.py`, run the installer from the v0.1.2 ZIP, restart Maya, then enable it in Plug-in Manager. v0.1.1 fixed the `argument 1 must be OpenMaya.MObject, not MObject` loading error; v0.1.2 adds the Rigging shelf button. The shelf button is removed on plug-in unload and created again when loaded. Automated tests cover plug-in registration and the shelf interaction; interactive Maya 2027 validation is still pending.
 
 To open the window from Maya's Python Script Editor after loading the plug-in:
 

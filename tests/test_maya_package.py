@@ -30,6 +30,80 @@ class FakeCmds:
 
 
 class MayaPackageTests(unittest.TestCase):
+    def test_rigging_shelf_button_uses_packaged_icon_and_opens_tool(self):
+        class InteractiveCmds:
+            def __init__(self):
+                self.controls = {}
+                self.icon = None
+                self.calls = 0
+
+            def about(self, batch=False):
+                return False
+
+            def shelfLayout(self, name, exists=False):
+                return name == 'Rigging'
+
+            def shelfButton(self, name, exists=False, **kwargs):
+                if exists:
+                    return name in self.controls
+                self.controls[name] = kwargs
+                return name
+
+            def menu(self, name, exists=False, **kwargs):
+                if exists:
+                    return name in self.controls
+                self.controls[name] = kwargs
+                return name
+
+            def menuItem(self, **kwargs):
+                self.icon = kwargs['image']
+                self.open_menu = kwargs['command']
+
+            def deleteUI(self, name, **kwargs):
+                self.controls.pop(name, None)
+
+            def bdfrAutoRig(self):
+                self.calls += 1
+
+        cmds = InteractiveCmds()
+        ommpx = types.ModuleType('maya.OpenMayaMPx')
+        ommpx.MPxCommand = type('MPxCommand', (), {})
+        ommpx.asMPxPtr = lambda command: command
+        class MFnPlugin:
+            def __init__(self, *args):
+                pass
+            def registerCommand(self, *args):
+                pass
+            def deregisterCommand(self, *args):
+                pass
+        ommpx.MFnPlugin = MFnPlugin
+        maya = types.ModuleType('maya')
+        maya.__path__ = []
+        maya.OpenMayaMPx = ommpx
+        maya.cmds = cmds
+        ui = types.ModuleType('maya_autorig.ui')
+        ui.close = lambda: None
+        source = Path(__file__).resolve().parents[1] / 'maya_packaging' / 'bdfr_advanced_autorig.py'
+        spec = importlib.util.spec_from_file_location('bdfr_advanced_autorig_shelf_test', source)
+        plugin = importlib.util.module_from_spec(spec)
+        with patch.dict(sys.modules, {'maya': maya, 'maya.OpenMayaMPx': ommpx,
+                                      'maya_autorig.ui': ui}):
+            spec.loader.exec_module(plugin)
+            plugin.initializePlugin(object())
+            button = cmds.controls['BDFR_AutoRig_ShelfButton']
+            self.assertEqual(button['parent'], 'Rigging')
+            self.assertEqual(button['sourceType'], 'python')
+            self.assertTrue(Path(button['image1']).is_file())
+            self.assertTrue(cmds.icon.endswith('BDFR_AutoRig_64.png'))
+            plugin._add_shelf_button()
+            self.assertEqual(len([name for name in cmds.controls if 'ShelfButton' in name]), 1)
+            exec(button['command'], {})
+            self.assertEqual(cmds.calls, 1)
+            cmds.open_menu()
+            self.assertEqual(cmds.calls, 2)
+            plugin.uninitializePlugin(object())
+            self.assertNotIn('BDFR_AutoRig_ShelfButton', cmds.controls)
+
     def test_plugin_registers_with_legacy_mobject_passed_by_maya(self):
         # Maya's initializePlugin argument is an API 1.0 MObject. API 2.0's
         # MFnPlugin rejects it with "argument 1 must be OpenMaya.MObject".
@@ -81,6 +155,7 @@ class MayaPackageTests(unittest.TestCase):
                 self.assertEqual(set(archive.namelist()), set(FILES))
                 for name, source in FILES.items():
                     self.assertEqual(archive.read(name), source.read_bytes())
+                self.assertTrue(archive.read('BDFR_AdvancedAutoRig/icons/BDFR_AutoRig_64.png').startswith(b'\x89PNG'))
                 archive.extractall(root / 'download')
             cmds = FakeCmds(root / 'maya_user')
             target = install(source=root / 'download', cmds=cmds)

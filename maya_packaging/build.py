@@ -5,12 +5,14 @@ from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = '0.1.1'
+VERSION = '0.1.2'
 NAME = 'BDFR_AdvancedAutoRig'
 FILES = {
     'install.py': ROOT / 'maya_packaging' / 'install.py',
     'README_MAYA.txt': ROOT / 'maya_packaging' / 'README_MAYA.txt',
     NAME + '.mod': ROOT / 'maya_packaging' / (NAME + '.mod'),
+    NAME + '/icons/BDFR_AutoRig_64.png': ROOT / 'maya_packaging' / 'icons' / 'BDFR_AutoRig_64.png',
+    NAME + '/icons/BDFR_AutoRig_128.png': ROOT / 'maya_packaging' / 'icons' / 'BDFR_AutoRig_128.png',
     NAME + '/plug-ins/bdfr_advanced_autorig.py': ROOT / 'maya_packaging' / 'bdfr_advanced_autorig.py',
     **{NAME + '/scripts/maya_autorig/' + name: ROOT / 'maya_autorig' / name
        for name in ('__init__.py', 'core.py', 'scene.py', 'export.py', 'ui.py')},

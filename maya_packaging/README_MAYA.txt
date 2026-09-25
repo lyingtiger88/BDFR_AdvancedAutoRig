@@ -1,4 +1,4 @@
-BDFR Advanced AutoRig for Maya v0.1.1 (Maya 2024+, Python 3.10+)
+BDFR Advanced AutoRig for Maya v0.1.2 (Maya 2024+, Python 3.10+)
 
 INSTALL (Windows, macOS or Linux)
 1. Extract this ZIP to any temporary folder. Do not install the Blender ZIP.
@@ -6,7 +6,9 @@ INSTALL (Windows, macOS or Linux)
 3. Restart Maya. In Windows > Settings/Preferences > Plug-in Manager, find
    bdfr_advanced_autorig.py and turn Loaded on (Auto load is optional).
 4. Select a model's mesh group in the Outliner, then use the BDFR AutoRig menu
-   > Open Vehicle AutoRig. You can also run in Maya's Python Script Editor:
+   > Open Vehicle AutoRig, or press the turquoise BDFR AutoRig icon in Maya's
+   Rigging shelf. The Rigging shelf button appears when the plug-in is loaded.
+   You can also run in Maya's Python Script Editor:
        from maya import cmds
        cmds.loadPlugin('bdfr_advanced_autorig.py', quiet=True)
        cmds.bdfrAutoRig()
@@ -18,9 +20,9 @@ replacing the filename with the actual location of extracted install.py:
 
 The installer copies the module into Maya's own user application directory.
 After restarting Maya, 'import maya_autorig' works without sys.path edits.
-When updating v0.1.0, unload the previous plug-in first, run the new installer,
-restart Maya, then load it again in Plug-in Manager. This release fixes the
-MObject type error during plug-in initialization.
+When updating, unload the previous plug-in first, run the new installer,
+restart Maya, then load it again in Plug-in Manager. v0.1.1 fixed the MObject
+type error during plug-in initialization; v0.1.2 adds the Rigging shelf icon.
 The input model must have separate mesh objects for movable parts. Save the
 scene, select its group, Analyze, review the detected parts, then Build Rig.
 Simple mode has independent front/rear wheel counts (Auto by default).

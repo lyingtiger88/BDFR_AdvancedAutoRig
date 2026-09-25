@@ -8,7 +8,9 @@
 
 [راهنمای فارسی](docs/README.fa.md) · [Installable add-on ZIP](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/releases/download/v0.6.0/BDFR_AdvancedAutoRig-0.6.0.zip)
 
-**Maya v0.1.1 preview:** [Download the separate installable Maya ZIP](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/releases/download/maya-v0.1.1/BDFR_AdvancedAutoRig_Maya-0.1.1.zip) and follow the [Maya installation guide](maya_autorig/README.md). Extract the Maya ZIP, drag its `install.py` into Maya, restart, then load `bdfr_advanced_autorig.py` in Plug-in Manager. It includes a basic Analyze/Build/FBX interface, rigid skin binding, Simple wheel counts and Unreal/Unity axis presets. v0.1.1 fixes the Maya 2027 plug-in loading MObject type error; interactive Maya validation is pending. The v0.6.0 ZIP above installs Blender only.
+**Maya v0.1.2 preview:** [Download the separate installable Maya ZIP](https://github.com/lyingtiger88/BDFR_AdvancedAutoRig/releases/download/maya-v0.1.2/BDFR_AdvancedAutoRig_Maya-0.1.2.zip) and follow the [Maya installation guide](maya_autorig/README.md). Extract the Maya ZIP, drag its `install.py` into Maya, restart, then load `bdfr_advanced_autorig.py` in Plug-in Manager. It includes a basic Analyze/Build/FBX interface, rigid skin binding, Simple wheel counts and Unreal/Unity axis presets. v0.1.2 adds a turquoise icon button to Maya's Rigging shelf and keeps the previous MObject loading fix; interactive Maya validation is pending. The v0.6.0 ZIP above installs Blender only.
+
+![Maya Rigging shelf icon](maya_packaging/icons/BDFR_AutoRig_128.png)
 
 ## What it does
 

@@ -49,7 +49,7 @@ def install(source=None, cmds=None):
             raise
     message = ('BDFR AutoRig installed in:\n' + str(modules) +
                '\n\nRestart Maya, load bdfr_advanced_autorig.py in Plug-in Manager, '
-               'then use the BDFR AutoRig menu. If an older version is loaded, '
+               'then use the Rigging shelf button or BDFR AutoRig menu. If an older version is loaded, '
                'unload it before restarting.')
     if not cmds.about(batch=True):
         cmds.confirmDialog(title='BDFR AutoRig installed', message=message, button=['OK'])
