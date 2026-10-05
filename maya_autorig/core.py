@@ -289,6 +289,23 @@ def _wheel_labels(analysis):
     return labels
 
 
+def unreal_wheel_bone_map(plan):
+    """Return Unreal/DriveCore wheel aliases for the canonical four-wheel layout.
+
+    The Maya authoring rig keeps readable Wheel.FL-style names. Export adapters
+    can use this deterministic map to emit the DriveCore skeleton contract
+    without changing the editable scene rig.
+    """
+    available = {joint.name for joint in plan.joints if joint.control == 'wheel'}
+    aliases = {
+        'Wheel.FL': 'wheel_fl',
+        'Wheel.FR': 'wheel_fr',
+        'Wheel.RL': 'wheel_rl',
+        'Wheel.RR': 'wheel_rr',
+    }
+    return {source: target for source, target in aliases.items() if source in available}
+
+
 def _steering(analysis, labels):
     parts, options = analysis.parts, analysis.options
     members = {}
