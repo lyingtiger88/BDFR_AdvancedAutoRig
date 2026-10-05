@@ -8,7 +8,7 @@ import os
 import tempfile
 
 from .core import Options
-from .scene import BuiltRig, _maya, _scene_up
+from .scene import BuiltRig, _maya, _scene_up, drivecore_wheel_bones
 
 
 ENGINE_AXES = {'UNREAL': ('Z', 'X'), 'UNITY': ('Y', 'Z')}
@@ -111,6 +111,9 @@ def export_game_fbx(built: BuiltRig, path: str | os.PathLike, options: ExportOpt
         raise ValueError('Rig has no analysis metadata; rebuild with this Maya core')
     if _scene_up(cmds) != built.analysis.options.up_axis:
         raise ValueError('Maya up axis changed since the rig was built')
+    if (options.engine == 'UNREAL' and
+            built.analysis.options.vehicle in {'CAR', 'TRUCK'}):
+        drivecore_wheel_bones(built)
     if not cmds.undoInfo(query=True, state=True):
         raise RuntimeError('Enable Maya Undo before exporting (required for safe rollback)')
     nodes = (built.root, *built.skin_clusters)
