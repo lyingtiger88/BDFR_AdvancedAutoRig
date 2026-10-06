@@ -65,7 +65,10 @@ class FakeCmds:
         self.plugin_loaded = False
         self.selection = ['|car']
         self.time = 8
-        self.nodes = {'|car', '|Rig', '|Rig|Body', '|Rig|Wheel', '|Rig|BDFR_FRONT'}
+        self.nodes = {
+            '|car', '|Rig', '|Rig|Body', '|Rig|Wheel', '|Rig|BDFR_FRONT',
+            '|Rig|wheel_fl', '|Rig|wheel_fr', '|Rig|wheel_rl', '|Rig|wheel_rr',
+        }
         self.rotations = {}
         self.group_name = None
         self.bakes = []
@@ -225,8 +228,10 @@ class MayaExportTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, 'failed'):
                     export_game_fbx(self.rig(), path, cmds=cmds, mel=mel)
                 self.assertEqual(os.listdir(directory), [])
-                self.assertEqual(cmds.nodes, {'|car', '|Rig', '|Rig|Body', '|Rig|Wheel',
-                                              '|Rig|BDFR_FRONT'})
+                self.assertEqual(cmds.nodes, {
+                    '|car', '|Rig', '|Rig|Body', '|Rig|Wheel', '|Rig|BDFR_FRONT',
+                    '|Rig|wheel_fl', '|Rig|wheel_fr', '|Rig|wheel_rl', '|Rig|wheel_rr',
+                })
                 self.assertEqual(cmds.selection, ['|car'])
                 self.assertEqual(cmds.undo_count, 1)
                 self.assertEqual(mel.settings, mel.initial)
