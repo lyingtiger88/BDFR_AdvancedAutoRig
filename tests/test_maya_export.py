@@ -154,8 +154,16 @@ class MayaExportTests(unittest.TestCase):
         opts = Options(up_axis=axis, forward_axis=forward or ('Z' if axis == 'Y' else 'Y'),
                        forward_sign=sign)
         analysis = analyze((Part('|car', (0, 0, 0), (1, 2, 3), 100, kind='BODY'),), opts)
-        return BuiltRig('|Rig', {'Root': '|Rig', 'Body': '|Rig|Body',
-                                  'Wheel': '|Rig|Wheel'}, {'|car': 'skin1'},
+        joints = {
+            'Root': '|Rig',
+            'Body': '|Rig|Body',
+            'Wheel': '|Rig|Wheel',
+            'Wheel.FL': '|Rig|wheel_fl',
+            'Wheel.FR': '|Rig|wheel_fr',
+            'Wheel.RL': '|Rig|wheel_rl',
+            'Wheel.RR': '|Rig|wheel_rr',
+        }
+        return BuiltRig('|Rig', joints, {'|car': 'skin1'},
                         '|Rig|BDFR_FRONT', analysis)
 
     def test_all_forward_up_combinations(self):
