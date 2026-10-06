@@ -5,6 +5,7 @@ from math import cos, radians, sin
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from maya_autorig import (BuiltRig, ExportOptions, Options, Part, analyze,
                           export_game_fbx, forward_correction)
@@ -221,6 +222,30 @@ class MayaExportTests(unittest.TestCase):
                 self.assertEqual(cmds.selection, ['|car'])
                 self.assertEqual(cmds.undo_count, 1)
                 self.assertEqual(mel.settings, mel.initial)
+
+    def test_unreal_export_enforces_drivecore_wheel_contract(self):
+        with tempfile.TemporaryDirectory() as directory:
+            unreal_path = os.path.join(directory, 'unreal.fbx')
+            with patch('maya_autorig.export.drivecore_wheel_bones') as ensure_wheels:
+                export_game_fbx(
+                    self.rig(),
+                    unreal_path,
+                    ExportOptions(engine='UNREAL'),
+                    FakeCmds(),
+                    FakeMel(),
+                )
+                ensure_wheels.assert_called_once()
+
+            unity_path = os.path.join(directory, 'unity.fbx')
+            with patch('maya_autorig.export.drivecore_wheel_bones') as ensure_wheels:
+                export_game_fbx(
+                    self.rig(),
+                    unity_path,
+                    ExportOptions(engine='UNITY'),
+                    FakeCmds(),
+                    FakeMel(),
+                )
+                ensure_wheels.assert_not_called()
 
     def test_validation(self):
         for kwargs in ({'engine': 'OTHER'}, {'step': 0}, {'start': 1},
