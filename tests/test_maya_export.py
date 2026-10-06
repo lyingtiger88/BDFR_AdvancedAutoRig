@@ -133,8 +133,15 @@ class FakeCmds:
         self.nodes.remove(name)
 
     def listRelatives(self, *args, **kwargs):
-        return [self.group_name + '|Rig', self.group_name + '|Rig|Body',
-                self.group_name + '|Rig|Wheel']
+        return [
+            self.group_name + '|Rig',
+            self.group_name + '|Rig|Body',
+            self.group_name + '|Rig|Wheel',
+            self.group_name + '|Rig|wheel_fl',
+            self.group_name + '|Rig|wheel_fr',
+            self.group_name + '|Rig|wheel_rl',
+            self.group_name + '|Rig|wheel_rr',
+        ]
 
     def bakeResults(self, joints, **kwargs):
         self.bakes.append((tuple(joints), kwargs))
